@@ -7,11 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ExpenseList } from '@/components/ExpenseList'
 
 type Trip = { id: string; name: string; created_at?: string }
 type Participant = { id: string; name: string }
 type TripRow = Database['public']['Tables']['trips']['Row']
 type ParticipantRow = Database['public']['Tables']['participants']['Row']
+type ExpenseRow = Database['public']['Tables']['expenses']['Row']
+type ExpenseParticipantRow = Database['public']['Tables']['expense_participants']['Row']
 
 type Props = {
   role: 'user' | 'admin'
@@ -28,6 +31,7 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
   const [trips, setTrips] = useState<Trip[]>([])
   const [selectedTripId, setSelectedTripId] = useState<string>('')
   const [participants, setParticipants] = useState<Participant[]>([])
+  const [expenses, setExpenses] = useState<any[]>([])
   const [tripName, setTripName] = useState('')
   const [participantName, setParticipantName] = useState('')
   const [message, setMessage] = useState<string | null>(null)
@@ -43,6 +47,7 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
 
   useEffect(() => {
     if (selectedTripId) loadParticipants(selectedTripId)
+    if (selectedTripId) loadExpenses(selectedTripId)
   }, [selectedTripId])
 
   async function handleLogin(e: React.FormEvent) {
@@ -83,6 +88,30 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
       return
     }
     setParticipants(data || [])
+  }
+
+  async function loadExpenses(tripId: string) {
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('trip_id', tripId)
+      .order('created_at', { ascending: false }) as { data: ExpenseRow[] | null; error: any }
+    if (error) {
+      setMessage('지출 목록을 불러오지 못했습니다.')
+      return
+    }
+
+    const withParticipants = await Promise.all(
+      (data || []).map(async (expense) => {
+        const { data: ep } = await supabase
+          .from('expense_participants')
+          .select('participant_id')
+          .eq('expense_id', expense.id) as { data: ExpenseParticipantRow[] | null; error: any }
+        return { ...expense, participant_ids: ep?.map(e => e.participant_id) || [] }
+      })
+    )
+
+    setExpenses(withParticipants)
   }
 
   async function addTrip(e: React.FormEvent) {
@@ -134,6 +163,17 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
     else {
       await loadParticipants(selectedTripId)
       setMessage('참여자를 삭제했습니다.')
+    }
+    setBusy(false)
+  }
+
+  async function deleteExpense(id: string) {
+    setBusy(true)
+    const { error } = await supabase.from('expenses').delete().eq('id', id)
+    if (error) setMessage('지출 삭제에 실패했습니다.')
+    else {
+      await loadExpenses(selectedTripId)
+      setMessage('지출을 삭제했습니다.')
     }
     setBusy(false)
   }
@@ -257,6 +297,16 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
                 {participants.length === 0 && <div className="text-sm text-gray-500">참여자가 없습니다.</div>}
               </div>
             </div>
+          </div>
+
+          <div className="space-y-3">
+            <p className="font-semibold text-gray-800">지출 내역 (선택한 세션)</p>
+            <ExpenseList
+              expenses={expenses}
+              participants={participants}
+              onDelete={deleteExpense}
+              showDelete
+            />
           </div>
         </CardContent>
       </Card>

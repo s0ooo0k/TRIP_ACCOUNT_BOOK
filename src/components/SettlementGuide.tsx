@@ -1,63 +1,110 @@
-import type { PersonalSettlement } from '../utils/settlement'
+import type { Participant, Expense } from '../utils/settlement'
 import { formatCurrency } from '../utils/settlement'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface Props {
-  settlements: PersonalSettlement[]
+  participants: Participant[]
+  expenses: Expense[]
 }
 
-export function SettlementGuide({ settlements }: Props) {
-  if (settlements.length === 0) {
+type NetBalance = { id: string; name: string; balance: number }
+
+function computeNetBalances(participants: Participant[], expenses: Expense[]): NetBalance[] {
+  const map = new Map<string, { name: string; balance: number }>()
+  participants.forEach(p => map.set(p.id, { name: p.name, balance: 0 }))
+
+  expenses.forEach(expense => {
+    const share = expense.amount / expense.participant_ids.length
+    // payer pays -> credit
+    const payer = map.get(expense.payer_id)
+    if (payer) payer.balance += expense.amount
+    // each participant owes their share
+    expense.participant_ids.forEach(pid => {
+      const entry = map.get(pid)
+      if (entry) entry.balance -= share
+    })
+  })
+
+  return Array.from(map.entries()).map(([id, { name, balance }]) => ({
+    id,
+    name,
+    balance: Math.round(balance)
+  }))
+}
+
+export function SettlementGuide({ participants, expenses }: Props) {
+  const net = computeNetBalances(participants, expenses)
+  const receivers = net.filter(n => n.balance > 0)
+  const payers = net.filter(n => n.balance < 0)
+
+  const isAllSettled = receivers.length === 0 && payers.length === 0
+
+  if (isAllSettled) {
     return (
-      <div className="bg-white rounded-lg shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">정산 안내</h2>
-        <p className="text-gray-500 text-center py-8">정산이 완료되었습니다!</p>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>정산 안내</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-gray-500 text-center py-4">정산이 완료되었습니다!</p>
+        </CardContent>
+      </Card>
     )
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm p-6">
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">정산 안내</h2>
-
-      <div className="space-y-6">
-        {settlements.map((personalSettlement) => (
-          <div key={personalSettlement.personId} className="border-l-4 border-sky-500 pl-4">
+    <Card>
+      <CardHeader>
+        <CardTitle>정산 안내 (총무 일괄 정산)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-bold text-gray-800">
-                {personalSettlement.personName}
-              </h3>
-              <span className="text-sm font-medium text-sky-600 bg-sky-50 px-3 py-1 rounded-full">
-                총 {formatCurrency(personalSettlement.totalAmount)}원
-              </span>
+              <h3 className="font-semibold text-orange-900">총무가 받을 금액</h3>
+              <span className="text-xs text-orange-700">마이너스 잔액</span>
             </div>
-
-            <div className="space-y-2">
-              {personalSettlement.settlements.map((settlement, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-3 bg-gradient-to-r from-sky-50 to-blue-50 rounded-lg"
-                >
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
-                    <span className="text-gray-700">{settlement.toName}에게</span>
+            {payers.length === 0 ? (
+              <p className="text-sm text-gray-600">모두 정산 완료</p>
+            ) : (
+              <div className="space-y-2">
+                {payers.map(p => (
+                  <div key={p.id} className="flex items-center justify-between rounded-md bg-white px-3 py-2 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+                    <span className="text-gray-800">{p.name}</span>
+                    <span className="font-semibold text-orange-700">-{formatCurrency(Math.abs(p.balance))}원</span>
                   </div>
-                  <span className="font-bold text-sky-600">
-                    {formatCurrency(settlement.amount)}원
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-        ))}
-      </div>
 
-      <div className="bg-sky-100 rounded-lg p-4 text-center mt-6">
-        <p className="text-sky-800 font-medium">
-          위 금액대로 송금하면 정산 완료!
-        </p>
-      </div>
-    </div>
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-emerald-900">총무가 보내줄 금액</h3>
+              <span className="text-xs text-emerald-700">플러스 잔액</span>
+            </div>
+            {receivers.length === 0 ? (
+              <p className="text-sm text-gray-600">보낼 사람이 없습니다.</p>
+            ) : (
+              <div className="space-y-2">
+                {receivers.map(p => (
+                  <div key={p.id} className="flex items-center justify-between rounded-md bg-white px-3 py-2 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+                    <span className="text-gray-800">{p.name}</span>
+                    <span className="font-semibold text-emerald-700">+{formatCurrency(p.balance)}원</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-orange-50 rounded-lg p-4 text-center">
+          <p className="text-orange-700 font-medium">
+            위 금액대로 총무가 모아서 보내면 정산 완료!
+          </p>
+          <p className="text-xs text-gray-600 mt-1">* 정밀 계산은 모든 지출을 반영한 순수 잔액 기준입니다.</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

@@ -17,7 +17,7 @@ type Participant = {
 }
 
 type LoginProps = {
-  onLogin: (tripId: string, participant: Participant) => Promise<void> | void
+  onLogin: (trip: Trip, participant: Participant) => Promise<void> | void
   onAdminNavigate?: () => void
 }
 
@@ -134,7 +134,14 @@ export function Login({ onLogin, onAdminNavigate }: LoginProps) {
       return
     }
 
-    await onLogin(selectedTripId, claimed)
+    const selectedTrip = trips.find(t => t.id === selectedTripId)
+    if (!selectedTrip) {
+      setError('여행 정보를 찾지 못했습니다.')
+      setLoading(false)
+      return
+    }
+
+    await onLogin(selectedTrip, claimed)
     setLoading(false)
   }
 

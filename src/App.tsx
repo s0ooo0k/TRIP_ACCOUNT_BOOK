@@ -1,14 +1,10 @@
 // @ts-nocheck
 import { useEffect, useState } from 'react'
-import { Routes, Route, Link } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import { supabase } from './lib/supabase'
 import { Login } from './components/Login'
-import { ParticipantManager } from './components/ParticipantManager'
-import { ExpenseForm } from './components/ExpenseForm'
-import { ExpenseList } from './components/ExpenseList'
-import { SettlementGuide } from './components/SettlementGuide'
-import { Button } from '@/components/ui/button'
 import { AdminPage } from './pages/AdminPage'
+import { MainDashboard } from './routes/MainDashboard'
 import { calculateSettlements } from './utils/settlement'
 import type { Expense, Participant } from './utils/settlement'
 import type { Database } from './lib/database.types'
@@ -17,6 +13,7 @@ function App() {
   const [participants, setParticipants] = useState<Participant[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [tripId, setTripId] = useState<string | null>(null)
+  const [tripName, setTripName] = useState<string>('')
   const [user, setUser] = useState<{ id: string; name: string } | null>(null)
   const [role, setRole] = useState<'user' | 'admin'>('user')
   const [loading, setLoading] = useState(true)
@@ -69,6 +66,7 @@ function App() {
 
       const savedTripId = localStorage.getItem('tripId')
       const savedParticipantId = localStorage.getItem('participantId')
+      const savedTripName = localStorage.getItem('tripName') || ''
 
       if (savedTripId && savedParticipantId) {
         const { data } = await supabase
@@ -80,7 +78,19 @@ function App() {
 
         if (data && data.user_id === currentUserId) {
           setTripId(savedTripId)
+          if (savedTripName) setTripName(savedTripName)
           setUser({ id: data.id, name: data.name })
+          if (!savedTripName) {
+            const { data: tripRow } = await supabase
+              .from('trips')
+              .select('name')
+              .eq('id', savedTripId)
+              .maybeSingle()
+            if (tripRow?.name) {
+              setTripName(tripRow.name)
+              localStorage.setItem('tripName', tripRow.name)
+            }
+          }
           await syncRole()
           await loadParticipants(savedTripId)
           await loadExpenses(savedTripId)
@@ -100,6 +110,7 @@ function App() {
     localStorage.removeItem('tripId')
     localStorage.removeItem('participantId')
     localStorage.removeItem('participantName')
+    localStorage.removeItem('tripName')
   }
 
   async function syncRole() {
@@ -117,23 +128,30 @@ function App() {
       .maybeSingle()
 
     if (!profile) {
-      await supabase.from('profiles').insert<ProfileRow>({ id: userId, role: 'user' } as ProfileRow).catch(() => {})
+      const { error: insertError } = await supabase
+        .from('profiles')
+        .insert<ProfileRow>({ id: userId, role: 'user' } as ProfileRow)
+      if (insertError) {
+        console.error('profiles insert error', insertError)
+      }
       setRole('user')
     } else {
       setRole(profile.role === 'admin' ? 'admin' : 'user')
     }
   }
 
-  async function handleLogin(selectedTripId: string, participant: { id: string; name: string }) {
-    setTripId(selectedTripId)
+  async function handleLogin(selectedTrip: { id: string; name: string }, participant: { id: string; name: string }) {
+    setTripId(selectedTrip.id)
+    setTripName(selectedTrip.name)
     setUser({ id: participant.id, name: participant.name })
-    localStorage.setItem('tripId', selectedTripId)
+    localStorage.setItem('tripId', selectedTrip.id)
+    localStorage.setItem('tripName', selectedTrip.name)
     localStorage.setItem('participantId', participant.id)
     localStorage.setItem('participantName', participant.name)
 
     await syncRole()
-    await loadParticipants(selectedTripId)
-    await loadExpenses(selectedTripId)
+    await loadParticipants(selectedTrip.id)
+    await loadExpenses(selectedTrip.id)
   }
 
   function handleLogout() {
@@ -246,7 +264,8 @@ function App() {
         trip_id: tripId,
         payer_id: expenseData.payerId,
         amount: expenseData.amount,
-        description: expenseData.description
+        description: expenseData.description,
+        created_by: user?.id ?? null
       } as Partial<ExpenseRow>)
       .select()
       .single()
@@ -287,70 +306,10 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-sky-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
           <p className="text-gray-600">로딩 중...</p>
-        </div>
-      </div>
-    )
-  }
-
-  const MainPage = () => {
-    if (!tripId || !user) {
-      return <Login onLogin={handleLogin} onAdminNavigate={() => { window.location.assign('/admin') }} />
-    }
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-sky-100">
-        <div className="container mx-auto px-4 py-8 max-w-4xl">
-          <div className="flex justify-between items-center mb-6 text-sm text-gray-600">
-            <div>
-              <span className="font-semibold text-gray-800">세션</span>{' '}
-              <span className="text-gray-600">{tripId.slice(0, 8)}...</span>
-              <span className="mx-2">•</span>
-              <span className="font-semibold text-gray-800">사용자</span>{' '}
-              <span className="text-gray-600">{user.name}</span>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" asChild>
-                <Link to="/admin">관리자</Link>
-              </Button>
-              <Button variant="ghost" onClick={handleLogout}>로그아웃</Button>
-            </div>
-          </div>
-
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">여행 정산</h1>
-            <p className="text-gray-600">함께한 여행, 간편하게 정산하세요</p>
-          </div>
-
-          <div className="space-y-6">
-            <ParticipantManager
-              participants={participants}
-              onAdd={handleAddParticipant}
-              onRemove={handleRemoveParticipant}
-              isAdmin={role === 'admin'}
-            />
-
-            {participants.length >= 2 && (
-              <ExpenseForm participants={participants} onAdd={handleAddExpense} />
-            )}
-
-            <ExpenseList expenses={expenses} participants={participants} onDelete={handleDeleteExpense} />
-
-            {expenses.length > 0 && <SettlementGuide settlements={settlements} />}
-          </div>
-
-          <div className="text-center mt-12 text-sm text-gray-500 space-y-3">
-            <p>데이터는 Supabase에 실시간 저장됩니다</p>
-            <Link
-              to="/admin"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50"
-            >
-              관리자 페이지로 이동
-            </Link>
-          </div>
         </div>
       </div>
     )
@@ -373,7 +332,27 @@ function App() {
           />
         }
       />
-      <Route path="/" element={<MainPage />} />
+      <Route
+        path="/"
+        element={
+          tripId && user ? (
+            <MainDashboard
+              tripId={tripId}
+              tripName={tripName}
+              user={user}
+              participants={participants}
+              expenses={expenses}
+              settlements={settlements}
+              role={role}
+              onAddExpense={handleAddExpense}
+              onDeleteExpense={handleDeleteExpense}
+              onLogout={handleLogout}
+            />
+          ) : (
+            <Login onLogin={handleLogin} onAdminNavigate={() => { window.location.assign('/admin') }} />
+          )
+        }
+      />
     </Routes>
   )
 }

@@ -9,6 +9,7 @@ export interface Expense {
   amount: number
   description: string | null
   participant_ids: string[]
+  created_by?: string | null
 }
 
 export interface PersonalSettlement {
