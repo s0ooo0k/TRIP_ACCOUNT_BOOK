@@ -23,16 +23,33 @@ export type Database = {
           id: string
           trip_id: string
           name: string
+          user_id: string | null
         }
         Insert: {
           id?: string
           trip_id: string
           name: string
+          user_id?: string | null
         }
         Update: {
           id?: string
           trip_id?: string
           name?: string
+          user_id?: string | null
+        }
+      }
+      profiles: {
+        Row: {
+          id: string
+          role: string
+        }
+        Insert: {
+          id: string
+          role?: string
+        }
+        Update: {
+          id?: string
+          role?: string
         }
       }
       expenses: {

@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "supabase:init": "supabase init",
+    "supabase:link": "supabase link --project-ref $PROJECT_REF --db-password $DB_PASSWORD",
+    "supabase:pull": "supabase db pull && supabase gen types typescript --linked --schema public > src/lib/database.types.ts",
+    "supabase:push": "supabase db push"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.3",
@@ -19,6 +23,7 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.17",
     "postcss": "^8.4.33",
+    "supabase": "^2.65.6",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.3.3",
     "vite": "^7.2.6"

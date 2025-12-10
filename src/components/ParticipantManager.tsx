@@ -5,9 +5,10 @@ interface Props {
   participants: Participant[]
   onAdd: (name: string) => void
   onRemove: (id: string) => void
+  isAdmin: boolean
 }
 
-export function ParticipantManager({ participants, onAdd, onRemove }: Props) {
+export function ParticipantManager({ participants, onAdd, onRemove, isAdmin }: Props) {
   const [newName, setNewName] = useState('')
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -29,7 +30,7 @@ export function ParticipantManager({ participants, onAdd, onRemove }: Props) {
             className="inline-flex items-center gap-2 bg-sky-100 text-sky-800 px-4 py-2 rounded-full"
           >
             <span>{participant.name}</span>
-            {participants.length > 2 && (
+            {isAdmin && participants.length > 2 && (
               <button
                 onClick={() => onRemove(participant.id)}
                 className="text-sky-600 hover:text-sky-800 font-bold"
@@ -49,12 +50,13 @@ export function ParticipantManager({ participants, onAdd, onRemove }: Props) {
           onChange={(e) => setNewName(e.target.value)}
           placeholder="이름 입력"
           className="flex-1 px-4 py-2 border border-sky-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400"
-        />
+          />
         <button
           type="submit"
-          className="px-6 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors"
+          disabled={!isAdmin}
+          className="px-6 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
         >
-          추가
+          {isAdmin ? '추가' : '관리자 전용'}
         </button>
       </form>
     </div>
