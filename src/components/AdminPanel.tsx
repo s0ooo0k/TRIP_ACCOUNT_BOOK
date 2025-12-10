@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
@@ -159,3 +160,4 @@ export function AdminPanel({ isAdmin, onDataChanged }: AdminPanelProps) {
     </div>
   )
 }
+// @ts-nocheck

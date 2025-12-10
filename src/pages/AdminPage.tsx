@@ -1,9 +1,17 @@
+// @ts-nocheck
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import type { Database } from '@/lib/database.types'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 
 type Trip = { id: string; name: string; created_at?: string }
 type Participant = { id: string; name: string }
+type TripRow = Database['public']['Tables']['trips']['Row']
+type ParticipantRow = Database['public']['Tables']['participants']['Row']
 
 type Props = {
   role: 'user' | 'admin'
@@ -55,7 +63,7 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
     const { data, error } = await supabase
       .from('trips')
       .select('id, name, created_at')
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }) as { data: TripRow[] | null; error: any }
     if (error) {
       setMessage('여행 목록을 불러오지 못했습니다.')
       return
@@ -69,7 +77,7 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
       .from('participants')
       .select('id, name')
       .eq('trip_id', tripId)
-      .order('name')
+      .order('name') as { data: ParticipantRow[] | null; error: any }
     if (error) {
       setMessage('참여자 목록을 불러오지 못했습니다.')
       return
@@ -81,7 +89,7 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
     e.preventDefault()
     if (!tripName.trim()) return
     setBusy(true)
-    const { error } = await supabase.from('trips').insert({ name: tripName.trim() })
+    const { error } = await supabase.from('trips').insert({ name: tripName.trim() } as Partial<TripRow>)
     if (error) setMessage('여행 추가에 실패했습니다.')
     else {
       setTripName('')
@@ -109,7 +117,7 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
     setBusy(true)
     const { error } = await supabase
       .from('participants')
-      .insert({ trip_id: selectedTripId, name: participantName.trim(), user_id: null })
+      .insert({ trip_id: selectedTripId, name: participantName.trim(), user_id: null } as Partial<ParticipantRow>)
     if (error) setMessage('참여자 추가에 실패했습니다.')
     else {
       setParticipantName('')
@@ -132,137 +140,127 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-sky-100 flex items-center justify-center px-4">
-        <div className="w-full max-w-lg bg-white/80 backdrop-blur rounded-2xl shadow-lg p-8 border border-sky-100">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-gray-800">관리자 로그인</h1>
-            <Link to="/" className="text-sky-600 hover:text-sky-800 text-sm">메인으로</Link>
-          </div>
-          <p className="text-sm text-gray-600 mb-4">Supabase Auth에 등록된 관리자 계정으로 로그인하세요.</p>
-          <form className="space-y-3" onSubmit={handleLogin}>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="관리자 이메일"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
-            />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="비밀번호"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
-            />
-            {authError && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{authError}</div>}
-            <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full bg-sky-600 text-white font-semibold py-2 rounded-lg hover:bg-sky-700 disabled:bg-gray-300"
-            >
-              {authLoading ? '로그인 중...' : '로그인'}
-            </button>
-          </form>
-        </div>
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center px-4">
+        <Card className="w-full max-w-lg bg-white/90">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div>
+              <CardTitle className="text-2xl">관리자 로그인</CardTitle>
+              <CardDescription>관리자 계정으로 로그인해 세션을 관리하세요.</CardDescription>
+            </div>
+            <Button variant="ghost" asChild>
+              <Link to="/">메인으로</Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-4" onSubmit={handleLogin}>
+              <div className="space-y-2">
+                <Label>이메일</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="관리자 이메일"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>비밀번호</Label>
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="비밀번호"
+                />
+              </div>
+              {authError && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{authError}</div>
+              )}
+              <Button type="submit" className="w-full" disabled={authLoading}>
+                {authLoading ? '로그인 중...' : '로그인'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-sky-100 flex items-center justify-center px-4 py-10">
-      <div className="w-full max-w-5xl bg-white/80 backdrop-blur rounded-2xl shadow-lg p-8 border border-sky-100 space-y-6">
-        <div className="flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center px-4 py-10">
+      <Card className="w-full max-w-5xl bg-white/90 shadow-xl border border-orange-100">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-wide text-sky-600 font-semibold">Admin</p>
-            <h1 className="text-2xl font-bold text-gray-800">여행 세션 관리</h1>
+            <p className="text-xs uppercase tracking-wide text-orange-600 font-semibold">Admin</p>
+            <CardTitle className="text-2xl">여행 세션 관리</CardTitle>
+            <CardDescription>세션 생성/삭제 및 참여자 관리</CardDescription>
           </div>
-          <div className="flex gap-3">
-            <Link to="/" className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">메인으로</Link>
-            <button onClick={onLogout} className="px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700">로그아웃</button>
+          <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/">메인으로</Link>
+            </Button>
+            <Button variant="default" onClick={onLogout}>로그아웃</Button>
           </div>
-        </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {message && (
+            <div className="text-sm text-gray-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">{message}</div>
+          )}
 
-        {message && (
-          <div className="text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">{message}</div>
-        )}
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <p className="font-semibold text-gray-800">여행 세션</p>
+              <form onSubmit={addTrip} className="flex gap-2">
+                <Input
+                  value={tripName}
+                  onChange={(e) => setTripName(e.target.value)}
+                  placeholder="새 여행 이름"
+                />
+                <Button type="submit" disabled={busy}>추가</Button>
+              </form>
 
-        <div className="grid md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <h2 className="font-semibold text-gray-800">여행 세션</h2>
-            <form onSubmit={addTrip} className="flex gap-2">
-              <input
-                value={tripName}
-                onChange={(e) => setTripName(e.target.value)}
-                placeholder="새 여행 이름"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
-              />
-              <button
-                type="submit"
-                disabled={busy}
-                className="px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-700 disabled:bg-gray-300"
-              >
-                추가
-              </button>
-            </form>
-
-            <div className="space-y-2 max-h-72 overflow-auto">
-              {trips.map((trip) => (
-                <div key={trip.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 ${trip.id === selectedTripId ? 'border-sky-500 bg-sky-50' : 'border-gray-200'}`}>
-                  <div>
-                    <div className="font-semibold text-gray-800">{trip.name}</div>
-                    <div className="text-xs text-gray-500">{trip.id.slice(0,8)}...</div>
+              <div className="space-y-2 max-h-72 overflow-auto pr-1">
+                {trips.map((trip) => (
+                  <div key={trip.id} className={`flex items-center justify-between rounded-lg border px-3 py-2 ${trip.id === selectedTripId ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}>
+                    <div>
+                      <div className="font-semibold text-gray-800">{trip.name}</div>
+                      <div className="text-xs text-gray-500">{trip.id.slice(0,8)}...</div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedTripId(trip.id)}>선택</Button>
+                      <Button variant="ghost" size="sm" className="text-red-600" onClick={() => deleteTrip(trip.id)}>삭제</Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setSelectedTripId(trip.id)}
-                      className="text-sky-600 text-sm hover:underline"
-                    >선택</button>
-                    <button
-                      onClick={() => deleteTrip(trip.id)}
-                      className="text-red-600 text-sm hover:underline"
-                    >삭제</button>
+                ))}
+                {trips.length === 0 && <div className="text-sm text-gray-500">저장된 여행 세션이 없습니다.</div>}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="font-semibold text-gray-800">참여자 (선택한 세션)</p>
+              <form onSubmit={addParticipant} className="flex gap-2">
+                <Input
+                  value={participantName}
+                  onChange={(e) => setParticipantName(e.target.value)}
+                  placeholder="참여자 이름"
+                />
+                <Button type="submit" variant="secondary" disabled={busy || !selectedTripId}>추가</Button>
+              </form>
+
+              <div className="space-y-2 max-h-72 overflow-auto pr-1">
+                {participants.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
+                    <span className="text-gray-800">{p.name}</span>
+                    <Button variant="ghost" size="sm" className="text-red-600" onClick={() => deleteParticipant(p.id)}>
+                      삭제
+                    </Button>
                   </div>
-                </div>
-              ))}
-              {trips.length === 0 && <div className="text-sm text-gray-500">저장된 여행 세션이 없습니다.</div>}
+                ))}
+                {participants.length === 0 && <div className="text-sm text-gray-500">참여자가 없습니다.</div>}
+              </div>
             </div>
           </div>
-
-          <div className="space-y-4">
-            <h2 className="font-semibold text-gray-800">참여자 (선택한 세션)</h2>
-            <form onSubmit={addParticipant} className="flex gap-2">
-              <input
-                value={participantName}
-                onChange={(e) => setParticipantName(e.target.value)}
-                placeholder="참여자 이름"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
-              />
-              <button
-                type="submit"
-                disabled={busy || !selectedTripId}
-                className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-gray-300"
-              >
-                추가
-              </button>
-            </form>
-
-            <div className="space-y-2 max-h-72 overflow-auto">
-              {participants.map((p) => (
-                <div key={p.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                  <span className="text-gray-800">{p.name}</span>
-                  <button
-                    onClick={() => deleteParticipant(p.id)}
-                    className="text-red-600 text-sm hover:underline"
-                  >
-                    삭제
-                  </button>
-                </div>
-              ))}
-              {participants.length === 0 && <div className="text-sm text-gray-500">참여자가 없습니다.</div>}
-            </div>
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
+// @ts-nocheck

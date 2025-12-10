@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import type { Participant } from '../utils/settlement'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 interface Props {
   participants: Participant[]
@@ -27,37 +29,33 @@ export function ParticipantManager({ participants, onAdd, onRemove, isAdmin }: P
         {participants.map(participant => (
           <div
             key={participant.id}
-            className="inline-flex items-center gap-2 bg-sky-100 text-sky-800 px-4 py-2 rounded-full"
+            className="inline-flex items-center gap-2 bg-orange-100 text-orange-900 px-4 py-2 rounded-full"
           >
             <span>{participant.name}</span>
             {isAdmin && participants.length > 2 && (
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => onRemove(participant.id)}
-                className="text-sky-600 hover:text-sky-800 font-bold"
                 title="삭제"
               >
                 ×
-              </button>
+              </Button>
             )}
           </div>
         ))}
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
+        <Input
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           placeholder="이름 입력"
-          className="flex-1 px-4 py-2 border border-sky-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-400"
-          />
-        <button
-          type="submit"
-          disabled={!isAdmin}
-          className="px-6 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
-        >
+        />
+        <Button type="submit" disabled={!isAdmin}>
           {isAdmin ? '추가' : '관리자 전용'}
-        </button>
+        </Button>
       </form>
     </div>
   )

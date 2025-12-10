@@ -2,18 +2,48 @@
 @tailwind components;
 @tailwind utilities;
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 20 14.3% 4.1%;
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    --card: 0 0% 100%;
+    --card-foreground: 20 14.3% 4.1%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 14.3% 4.1%;
+
+    /* Orange theme */
+    --primary: 25 95% 53%;
+    --primary-foreground: 60 9.1% 97.8%;
+
+    --secondary: 20 12% 94%;
+    --secondary-foreground: 24 9.8% 10%;
+
+    --muted: 20 12% 94%;
+    --muted-foreground: 25 5.3% 44.7%;
+
+    --accent: 25 95% 90%;
+    --accent-foreground: 24 9.8% 10%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 60 9.1% 97.8%;
+
+    --border: 20 5.9% 90%;
+    --input: 20 5.9% 90%;
+    --ring: 25 95% 53%;
+
+    --radius: 12px;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
 }
 
 input[type="number"]::-webkit-inner-spin-button,
