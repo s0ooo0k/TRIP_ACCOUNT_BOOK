@@ -119,33 +119,22 @@ export function Login({ onLogin, onAdminNavigate }: LoginProps) {
       return
     }
 
-    if (existing.user_id && existing.user_id !== sessionUserId) {
-      setError('이미 다른 사용자가 이 이름으로 로그인했습니다.')
+    // 항상 현재 사용자로 클레임(다른 기기/사용자도 동일 이름 사용 가능)
+    const { data: claimed, error: claimError } = await supabase
+      .from('participants')
+      .update({ user_id: sessionUserId })
+      .eq('id', existing.id)
+      .select('id, name, user_id')
+      .single()
+
+    if (claimError || !claimed) {
+      console.error('참여자 할당 실패:', claimError)
+      setError('이름 할당에 실패했습니다. 다시 시도해주세요.')
       setLoading(false)
       return
     }
 
-    let participant = existing
-
-    if (!existing.user_id) {
-      const { data: claimed, error: claimError } = await supabase
-        .from('participants')
-        .update({ user_id: sessionUserId })
-        .eq('id', existing.id)
-        .select('id, name, user_id')
-        .single()
-
-      if (claimError || !claimed) {
-        console.error('참여자 할당 실패:', claimError)
-        setError('이름 할당에 실패했습니다. 다시 시도해주세요.')
-        setLoading(false)
-        return
-      }
-
-      participant = claimed
-    }
-
-    await onLogin(selectedTripId, participant)
+    await onLogin(selectedTripId, claimed)
     setLoading(false)
   }
 
