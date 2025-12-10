@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatCurrency, DuesGoal, Participant, TreasuryTx } from '@/utils/settlement'
 import { Select } from '@/components/ui/select'
+import { cn } from '@/lib/utils'
 
 type Props = {
   dues: DuesGoal[]
@@ -22,7 +23,7 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue,
   const [target, setTarget] = useState('')
   const [selectedDueId, setSelectedDueId] = useState<string>('')
   const [amount, setAmount] = useState('')
-  const [counterpartyId, setCounterpartyId] = useState(participants[0]?.id || '')
+  const [selectedCounterparties, setSelectedCounterparties] = useState<Set<string>>(new Set())
   const [memo, setMemo] = useState('')
 
   const dueStats = useMemo(() => {
@@ -30,6 +31,18 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue,
     treasury.forEach(tx => {
       if (tx.direction === 'receive' && tx.due_id) {
         map.set(tx.due_id, (map.get(tx.due_id) || 0) + tx.amount)
+      }
+    })
+    return map
+  }, [treasury])
+
+  const perPersonPaid = useMemo(() => {
+    const map = new Map<string, Map<string, number>>() // dueId -> (participantId -> amount)
+    treasury.forEach(tx => {
+      if (tx.direction === 'receive' && tx.due_id && tx.counterparty_id) {
+        const inner = map.get(tx.due_id) || new Map<string, number>()
+        inner.set(tx.counterparty_id, (inner.get(tx.counterparty_id) || 0) + tx.amount)
+        map.set(tx.due_id, inner)
       }
     })
     return map
@@ -51,19 +64,38 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue,
   const handleAddReceipt = (e: React.FormEvent) => {
     e.preventDefault()
     const amt = parseInt(amount, 10)
-    if (!selectedDueId || !counterpartyId || !amt || amt <= 0) {
-      alert('회비 항목, 상대방, 금액을 입력하세요.')
+    if (!selectedDueId || selectedCounterparties.size === 0 || !amt || amt <= 0) {
+      alert('회비 항목, 입금자, 금액을 입력하세요.')
       return
     }
-    onAddTreasury({
-      direction: 'receive',
-      counterpartyId,
-      amount: amt,
-      memo: memo || `회비 - ${dues.find(d => d.id === selectedDueId)?.title || ''}`,
-      dueId: selectedDueId
+    const memoText = memo || `회비 - ${dues.find(d => d.id === selectedDueId)?.title || ''}`
+    selectedCounterparties.forEach(pid => {
+      onAddTreasury({
+        direction: 'receive',
+        counterpartyId: pid,
+        amount: amt,
+        memo: memoText,
+        dueId: selectedDueId
+      })
     })
     setAmount('')
     setMemo('')
+    // 선택 유지해서 연속 입력 가능
+  }
+
+  const toggleCounterparty = (id: string) => {
+    const next = new Set(selectedCounterparties)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedCounterparties(next)
+  }
+
+  const toggleAll = () => {
+    if (selectedCounterparties.size === participants.length) {
+      setSelectedCounterparties(new Set())
+    } else {
+      setSelectedCounterparties(new Set(participants.map(p => p.id)))
+    }
   }
 
   return (
@@ -101,6 +133,7 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue,
               const received = dueStats.get(d.id) || 0
               const totalTarget = d.target_amount * participants.length
               const remaining = Math.max(totalTarget - received, 0)
+              const perPerson = perPersonPaid.get(d.id) || new Map<string, number>()
               return (
                 <div key={d.id} className="rounded-lg border border-orange-100 bg-white p-4 shadow-sm space-y-2">
                   <div className="flex items-center justify-between">
@@ -111,6 +144,23 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue,
                   <div className="text-sm text-gray-700">총 목표: {formatCurrency(totalTarget)}원</div>
                   <div className="text-sm text-emerald-700">받은 금액: {formatCurrency(received)}원</div>
                   <div className="text-sm text-orange-700">남은 금액: {formatCurrency(remaining)}원</div>
+                  <div className="pt-1 border-t border-orange-100">
+                    <div className="text-xs font-semibold text-gray-700 mb-1">개인별 현황</div>
+                    <div className="space-y-1">
+                      {participants.map(p => {
+                        const paid = perPerson.get(p.id) || 0
+                        const done = paid >= d.target_amount
+                        return (
+                          <div key={p.id} className="flex items-center justify-between text-sm">
+                            <span className="text-gray-800">{p.name}</span>
+                            <span className={done ? 'text-emerald-700 font-semibold' : 'text-orange-700'}>
+                              {done ? '완납' : `${formatCurrency(paid)} / ${formatCurrency(d.target_amount)}원`}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               )
             })}
@@ -118,36 +168,57 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue,
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>회비 입금 기록</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {isTreasurer ? (
-            <form onSubmit={handleAddReceipt} className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>회비 항목</Label>
-                <Select value={selectedDueId} onChange={(e) => setSelectedDueId(e.target.value)}>
-                  <option value="">선택</option>
-                  {dues.map(d => (
-                    <option key={d.id} value={d.id}>{d.title}</option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>입금자</Label>
-                <Select value={counterpartyId} onChange={(e) => setCounterpartyId(e.target.value)}>
-                  <option value="">선택</option>
-                  {participants.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>금액</Label>
-                <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
-              </div>
-              <div className="space-y-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>회비 입금 기록</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {isTreasurer ? (
+                <form onSubmit={handleAddReceipt} className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>회비 항목</Label>
+                    <Select value={selectedDueId} onChange={(e) => setSelectedDueId(e.target.value)}>
+                      <option value="">선택</option>
+                      {dues.map(d => (
+                        <option key={d.id} value={d.id}>{d.title}</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <Label>입금자</Label>
+                      <Button type="button" variant="outline" size="sm" onClick={toggleAll}>
+                        {selectedCounterparties.size === participants.length ? '전체 해제' : '전체 선택'}
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {participants.map(p => {
+                        const active = selectedCounterparties.has(p.id)
+                        return (
+                          <Button
+                            key={p.id}
+                            type="button"
+                            variant={active ? 'default' : 'outline'}
+                            className={cn(
+                              'justify-start text-sm',
+                              active
+                                ? 'bg-amber-400 hover:bg-amber-500 text-orange-950 border-amber-400'
+                                : 'border-gray-200 text-gray-800 hover:border-orange-200 hover:text-orange-700'
+                            )}
+                            onClick={() => toggleCounterparty(p.id)}
+                            aria-pressed={active}
+                          >
+                            {p.name}
+                          </Button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>금액</Label>
+                    <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0" />
+                  </div>
+                  <div className="space-y-2">
                 <Label>메모 (선택)</Label>
                 <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 현금 입금" />
               </div>

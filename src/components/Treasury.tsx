@@ -99,7 +99,7 @@ export function Treasury({ participants, treasury, isTreasurer, onAdd, dues = []
 
             <div className="space-y-2">
               <Label>메모 (선택)</Label>
-              <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 1차 회비" />
+              <Input value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="예: 사용 내역" />
             </div>
 
             <Button type="submit" className="w-full">기록 추가</Button>
