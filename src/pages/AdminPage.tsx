@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { ExpenseList } from '@/components/ExpenseList'
 
 type Trip = { id: string; name: string; created_at?: string }
-type Participant = { id: string; name: string }
+type Participant = { id: string; name: string; is_treasurer?: boolean }
 type TripRow = Database['public']['Tables']['trips']['Row']
 type ParticipantRow = Database['public']['Tables']['participants']['Row']
 type ExpenseRow = Database['public']['Tables']['expenses']['Row']
@@ -80,14 +80,14 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
   async function loadParticipants(tripId: string) {
     const { data, error } = await supabase
       .from('participants')
-      .select('id, name')
+      .select('id, name, is_treasurer')
       .eq('trip_id', tripId)
       .order('name') as { data: ParticipantRow[] | null; error: any }
     if (error) {
       setMessage('참여자 목록을 불러오지 못했습니다.')
       return
     }
-    setParticipants(data || [])
+    setParticipants((data || []) as Participant[])
   }
 
   async function loadExpenses(tripId: string) {
@@ -174,6 +174,20 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
     else {
       await loadExpenses(selectedTripId)
       setMessage('지출을 삭제했습니다.')
+    }
+    setBusy(false)
+  }
+
+  async function toggleTreasurer(id: string, next: boolean) {
+    setBusy(true)
+    const { error } = await supabase
+      .from('participants')
+      .update({ is_treasurer: next })
+      .eq('id', id)
+    if (error) setMessage('총무 변경에 실패했습니다.')
+    else {
+      await loadParticipants(selectedTripId)
+      setMessage('총무 권한을 변경했습니다.')
     }
     setBusy(false)
   }
@@ -287,11 +301,27 @@ export function AdminPage({ role, onLoginSuccess, onLogout }: Props) {
 
               <div className="space-y-2 max-h-72 overflow-auto pr-1">
                 {participants.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2">
-                    <span className="text-gray-800">{p.name}</span>
-                    <Button variant="ghost" size="sm" className="text-red-600" onClick={() => deleteParticipant(p.id)}>
-                      삭제
-                    </Button>
+                  <div key={p.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 gap-2">
+                    <div>
+                      <span className="text-gray-800">{p.name}</span>
+                      {p.is_treasurer && (
+                        <span className="ml-2 text-xs rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">
+                          총무
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleTreasurer(p.id, !p.is_treasurer)}
+                      >
+                        {p.is_treasurer ? '총무 해제' : '총무 지정'}
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-red-600" onClick={() => deleteParticipant(p.id)}>
+                        삭제
+                      </Button>
+                    </div>
                   </div>
                 ))}
                 {participants.length === 0 && <div className="text-sm text-gray-500">참여자가 없습니다.</div>}

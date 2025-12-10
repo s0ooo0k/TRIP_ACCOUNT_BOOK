@@ -5,6 +5,8 @@ import { ParticipantManager } from '@/components/ParticipantManager'
 import { ExpenseForm } from '@/components/ExpenseForm'
 import { ExpenseList } from '@/components/ExpenseList'
 import { SettlementGuide } from '@/components/SettlementGuide'
+import { Treasury } from '@/components/Treasury'
+import { DuesPanel } from '@/components/DuesPanel'
 
 export function MainDashboard({
   tripId,
@@ -14,15 +16,20 @@ export function MainDashboard({
   expenses,
   settlements,
   role,
+  treasury,
+  dues,
   onAddExpense,
   onDeleteExpense,
+  onAddTreasury,
+  onAddDue,
   onLogout,
 }: any) {
   const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
-  const [activeSection, setActiveSection] = useState<'summary' | 'participants' | 'expenses' | 'settlement'>('expenses')
+  const [activeSection, setActiveSection] = useState<'summary' | 'participants' | 'expenses' | 'settlement' | 'dues'>('expenses')
 
   const sections = [
     { id: 'expenses', label: '지출' },
+    { id: 'dues', label: '회비' },
     { id: 'summary', label: '요약' },
     { id: 'participants', label: '참여자' },
     { id: 'settlement', label: '정산' }
@@ -135,15 +142,33 @@ export function MainDashboard({
           )}
 
           {activeSection === 'settlement' && expenses.length > 0 && (
+            <div className="space-y-4">
               <SettlementGuide
-                settlements={settlements}
                 participants={participants}
                 expenses={expenses}
               />
+              <Treasury
+                participants={participants}
+                treasury={treasury}
+                isTreasurer={participants.find((p: any) => p.id === user.id)?.is_treasurer}
+                onAdd={onAddTreasury}
+              />
+            </div>
           )}
 
           {activeSection === 'settlement' && expenses.length === 0 && (
             <div className="text-sm text-gray-500">정산 안내를 보려면 지출을 추가하세요.</div>
+          )}
+
+          {activeSection === 'dues' && (
+            <DuesPanel
+              dues={dues}
+              participants={participants}
+              treasury={treasury}
+              isTreasurer={participants.find((p: any) => p.id === user.id)?.is_treasurer}
+              onAddDue={onAddDue}
+              onAddTreasury={onAddTreasury}
+            />
           )}
 
           <footer className="text-center mt-6 text-xs text-gray-500 pb-2">

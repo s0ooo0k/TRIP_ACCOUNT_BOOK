@@ -1,6 +1,7 @@
 export interface Participant {
   id: string
   name: string
+  is_treasurer?: boolean
 }
 
 export interface Expense {
@@ -10,6 +11,27 @@ export interface Expense {
   description: string | null
   participant_ids: string[]
   created_by?: string | null
+}
+
+export interface TreasuryTx {
+  id: string
+  trip_id: string
+  treasurer_id: string | null
+  direction: 'receive' | 'send'
+  counterparty_id: string | null
+  amount: number
+  memo: string | null
+  created_at?: string
+  due_id?: string | null
+}
+
+export interface DuesGoal {
+  id: string
+  trip_id: string
+  title: string
+  due_date: string | null
+  target_amount: number
+  created_at?: string
 }
 
 export interface PersonalSettlement {

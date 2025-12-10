@@ -6,16 +6,18 @@ import { Login } from './components/Login'
 import { AdminPage } from './pages/AdminPage'
 import { MainDashboard } from './routes/MainDashboard'
 import { calculateSettlements } from './utils/settlement'
-import type { Expense, Participant } from './utils/settlement'
+import type { Expense, Participant, TreasuryTx, DuesGoal } from './utils/settlement'
 import type { Database } from './lib/database.types'
 
 function App() {
   const [participants, setParticipants] = useState<Participant[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [dues, setDues] = useState<DuesGoal[]>([])
   const [tripId, setTripId] = useState<string | null>(null)
   const [tripName, setTripName] = useState<string>('')
   const [user, setUser] = useState<{ id: string; name: string } | null>(null)
   const [role, setRole] = useState<'user' | 'admin'>('user')
+  const [treasury, setTreasury] = useState<TreasuryTx[]>([])
   const [loading, setLoading] = useState(true)
 
   const settlements = calculateSettlements(participants, expenses)
@@ -94,6 +96,8 @@ function App() {
           await syncRole()
           await loadParticipants(savedTripId)
           await loadExpenses(savedTripId)
+          await loadDues(savedTripId)
+          await loadTreasury(savedTripId)
         } else {
           clearLocalSession()
         }
@@ -152,6 +156,8 @@ function App() {
     await syncRole()
     await loadParticipants(selectedTrip.id)
     await loadExpenses(selectedTrip.id)
+    await loadDues(selectedTrip.id)
+    await loadTreasury(selectedTrip.id)
   }
 
   function handleLogout() {
@@ -217,6 +223,36 @@ function App() {
     setExpenses(expensesWithParticipants)
   }
 
+  async function loadDues(id?: string) {
+    const targetId = id || tripId
+    if (!targetId) return
+    const { data, error } = await supabase
+      .from('dues')
+      .select('*')
+      .eq('trip_id', targetId)
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('회비 목표 로드 오류:', error)
+      return
+    }
+    setDues((data || []) as DuesGoal[])
+  }
+
+  async function loadTreasury(id?: string) {
+    const targetId = id || tripId
+    if (!targetId) return
+    const { data, error } = await supabase
+      .from('treasury_transactions')
+      .select('*')
+      .eq('trip_id', targetId)
+      .order('created_at', { ascending: false })
+    if (error) {
+      console.error('정산 기록 로드 오류:', error)
+      return
+    }
+    setTreasury(data || [])
+  }
+
   async function handleAddParticipant(name: string) {
     if (!tripId) return
     const { error } = await supabase
@@ -258,6 +294,11 @@ function App() {
 
   async function handleAddExpense(expenseData: { payerId: string; amount: number; description: string; participantIds: string[] }) {
     if (!tripId) return
+    const current = participants.find(p => p.id === user?.id)
+    if (!current?.is_treasurer) {
+      alert('총무 권한이 있는 사용자만 지출을 추가할 수 있습니다.')
+      return
+    }
     const { data: newExpense, error: expenseError } = await supabase
       .from('expenses')
       .insert({
@@ -289,6 +330,55 @@ function App() {
       return
     }
     await loadExpenses()
+  }
+
+  async function handleAddTreasury(tx: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string }) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 기록할 수 있습니다.')
+      return
+    }
+    const { error } = await supabase
+      .from('treasury_transactions')
+      .insert({
+        trip_id: tripId,
+        treasurer_id: current.id,
+        direction: tx.direction,
+        counterparty_id: tx.counterpartyId,
+        amount: tx.amount,
+        memo: tx.memo,
+        due_id: tx.dueId || null
+      })
+    if (error) {
+      console.error('정산 기록 추가 오류:', error)
+      alert('정산 기록 추가에 실패했습니다.')
+      return
+    }
+    await loadTreasury()
+  }
+
+  async function handleAddDue(due: { title: string; dueDate: string | null; target: number }) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 회비 목표를 추가할 수 있습니다.')
+      return
+    }
+    const { error } = await supabase
+      .from('dues')
+      .insert({
+        trip_id: tripId,
+        title: due.title,
+        due_date: due.dueDate,
+        target_amount: due.target
+      })
+    if (error) {
+      console.error('회비 목표 추가 오류:', error)
+      alert('회비 목표 추가에 실패했습니다.')
+      return
+    }
+    await loadDues()
   }
 
   async function handleDeleteExpense(id: string) {
@@ -344,8 +434,12 @@ function App() {
               expenses={expenses}
               settlements={settlements}
               role={role}
+              treasury={treasury}
+              dues={dues}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
+              onAddTreasury={handleAddTreasury}
+              onAddDue={handleAddDue}
               onLogout={handleLogout}
             />
           ) : (
