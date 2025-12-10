@@ -20,9 +20,6 @@ export function Login({ onLogin, onAdminNavigate }: LoginProps) {
   const [trips, setTrips] = useState<Trip[]>([])
   const [selectedTripId, setSelectedTripId] = useState<string | null>(null)
   const [participantName, setParticipantName] = useState('')
-  const [adminMode, setAdminMode] = useState(false)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [fetchingTrips, setFetchingTrips] = useState(true)
   const [sessionReady, setSessionReady] = useState(false)
@@ -94,27 +91,14 @@ export function Login({ onLogin, onAdminNavigate }: LoginProps) {
     setLoading(true)
     setError(null)
 
-    let sessionUserId: string | null = null
-
-    if (adminMode) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error || !data.session) {
-        console.error('관리자 로그인 실패:', error)
-        setError('관리자 로그인에 실패했습니다.')
-        setLoading(false)
-        return
-      }
-      sessionUserId = data.session.user.id
-      setSessionReady(true)
-    } else {
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError || !sessionData.session) {
-        setError('로그인 세션을 만들지 못했습니다. 다시 시도해주세요.')
-        setLoading(false)
-        return
-      }
-      sessionUserId = sessionData.session.user.id
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+    if (sessionError || !sessionData.session) {
+      setError('로그인 세션을 만들지 못했습니다. 다시 시도해주세요.')
+      setLoading(false)
+      return
     }
+
+    const sessionUserId = sessionData.session.user.id
 
     const { data: existing, error: fetchError } = await supabase
       .from('participants')
@@ -230,54 +214,21 @@ export function Login({ onLogin, onAdminNavigate }: LoginProps) {
             disabled={!sessionReady || loading || fetchingTrips || trips.length === 0}
             className="w-full bg-sky-600 text-white font-semibold py-3 rounded-lg shadow hover:bg-sky-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
           >
-            {adminMode
-              ? loading ? '관리자 로그인 중...' : '관리자 모드로 시작'
-              : !sessionReady ? '세션 준비 중...' : loading ? '확인 중...' : '시작하기'}
+            {!sessionReady ? '세션 준비 중...' : loading ? '확인 중...' : '시작하기'}
           </button>
         </form>
 
-        <div className="mt-6 border-t border-gray-200 pt-4 space-y-3">
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700 font-semibold">
-            <input
-              type="checkbox"
-              checked={adminMode}
-              onChange={(e) => setAdminMode(e.target.checked)}
-            />
-            관리자 로그인 사용
-          </label>
-
-          {adminMode && (
-            <div className="space-y-3">
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="관리자 이메일"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
-              />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="관리자 비밀번호"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-sky-400 focus:border-sky-400"
-              />
-              <p className="text-xs text-gray-500">관리자 계정은 Supabase Auth에서 미리 생성해 두세요.</p>
-            </div>
-          )}
-
-          {onAdminNavigate && !adminMode && (
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={onAdminNavigate}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50"
-              >
-                관리자 페이지로 이동
-              </button>
-            </div>
-          )}
-        </div>
+        {onAdminNavigate && (
+          <div className="mt-6 text-center">
+            <button
+              type="button"
+              onClick={onAdminNavigate}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-200 text-sky-700 hover:bg-sky-50"
+            >
+              관리자 페이지로 이동
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
