@@ -12,6 +12,7 @@ type Props = {
   onRestoreExpense: (id: string) => void
   onRestoreDue: (id: string) => void
   onRestoreTreasury: (id: string) => void
+  canRestore?: boolean
 }
 
 export function DeletedRecordsPanel({
@@ -22,6 +23,7 @@ export function DeletedRecordsPanel({
   onRestoreExpense,
   onRestoreDue,
   onRestoreTreasury,
+  canRestore = false,
 }: Props) {
   const participantMap = new Map(participants.map(p => [p.id, p.name]))
 
@@ -53,9 +55,11 @@ export function DeletedRecordsPanel({
                     </div>
                   )}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => onRestoreExpense(expense.id)}>
-                  복구
-                </Button>
+                {canRestore && (
+                  <Button variant="outline" size="sm" onClick={() => onRestoreExpense(expense.id)}>
+                    복구
+                  </Button>
+                )}
               </div>
             ))
           )}
@@ -78,9 +82,11 @@ export function DeletedRecordsPanel({
                     <span className="text-xs text-gray-500"> · 삭제일: {new Date(d.deleted_at).toLocaleDateString()}</span>
                   )}
                 </div>
-                <Button variant="outline" size="sm" onClick={() => onRestoreDue(d.id)}>
-                  복구
-                </Button>
+                {canRestore && (
+                  <Button variant="outline" size="sm" onClick={() => onRestoreDue(d.id)}>
+                    복구
+                  </Button>
+                )}
               </div>
             ))
           )}
@@ -110,9 +116,11 @@ export function DeletedRecordsPanel({
                   <div className={tx.direction === 'receive' ? 'text-emerald-700 font-semibold' : 'text-orange-700 font-semibold'}>
                     {tx.direction === 'receive' ? '+' : '-'}{formatCurrency(tx.amount)}원
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => onRestoreTreasury(tx.id)}>
-                    복구
-                  </Button>
+                  {canRestore && (
+                    <Button variant="outline" size="sm" onClick={() => onRestoreTreasury(tx.id)}>
+                      복구
+                    </Button>
+                  )}
                 </div>
               </div>
             ))
@@ -122,4 +130,3 @@ export function DeletedRecordsPanel({
     </div>
   )
 }
-

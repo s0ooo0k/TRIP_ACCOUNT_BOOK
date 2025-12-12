@@ -38,7 +38,7 @@ export function MainDashboard({
   onLogout,
 }: any) {
   const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
-  const [activeSection, setActiveSection] = useState<'summary' | 'participants' | 'expenses' | 'settlement' | 'dues'>('expenses')
+  const [activeSection, setActiveSection] = useState<'summary' | 'participants' | 'expenses' | 'settlement' | 'dues' | 'deleted'>('expenses')
   const isTreasurer = participants.find((p: any) => p.id === user.id)?.is_treasurer
 
   const sections = [
@@ -47,7 +47,7 @@ export function MainDashboard({
     { id: 'summary', label: '요약' },
     { id: 'participants', label: '참여자' },
     { id: 'settlement', label: '정산' },
-    ...(isTreasurer ? [{ id: 'deleted', label: '삭제내역' }] : [])
+    { id: 'deleted', label: '삭제내역' }
   ]
 
   return (
@@ -202,7 +202,7 @@ export function MainDashboard({
             />
           )}
 
-          {activeSection === 'deleted' && isTreasurer && (
+          {activeSection === 'deleted' && (
             <DeletedRecordsPanel
               participants={participants}
               deletedExpenses={deletedExpenses || []}
@@ -211,6 +211,7 @@ export function MainDashboard({
               onRestoreExpense={onRestoreExpense}
               onRestoreDue={onRestoreDue}
               onRestoreTreasury={onRestoreTreasury}
+              canRestore={!!isTreasurer}
             />
           )}
 
