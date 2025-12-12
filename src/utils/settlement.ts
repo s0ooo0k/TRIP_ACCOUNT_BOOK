@@ -12,6 +12,28 @@ export interface Expense {
   description: string | null
   participant_ids: string[]
   created_by?: string | null
+  images?: ExpenseImage[]
+}
+
+export interface ExpenseImage {
+  id: string
+  expense_id: string
+  path: string
+  url?: string | null
+  mime_type?: string | null
+  size?: number | null
+  width?: number | null
+  height?: number | null
+  created_at?: string
+}
+
+export interface ExpenseImageInput {
+  blob: Blob
+  originalName: string
+  mimeType: string
+  size: number
+  width: number
+  height: number
 }
 
 export interface TreasuryTx {

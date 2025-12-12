@@ -6,7 +6,7 @@ import { Login } from './components/Login'
 import { AdminPage } from './pages/AdminPage'
 import { MainDashboard } from './routes/MainDashboard'
 import { calculateSettlements } from './utils/settlement'
-import type { Expense, Participant, TreasuryTx, DuesGoal, ParticipantAccount, TripTreasuryAccount } from './utils/settlement'
+import type { Expense, Participant, TreasuryTx, DuesGoal, ParticipantAccount, TripTreasuryAccount, ExpenseImageInput } from './utils/settlement'
 import type { Database } from './lib/database.types'
 
 function App() {
@@ -221,9 +221,33 @@ function App() {
           .select('participant_id')
           .eq('expense_id', expense.id) as { data: ExpenseParticipantRow[] | null; error: any }
 
+        let imagesWithUrls: any[] = []
+        try {
+          const { data: imageRows, error: imageError } = await supabase
+            .from('expense_images')
+            .select('*')
+            .eq('expense_id', expense.id)
+            .order('created_at', { ascending: true })
+          if (!imageError && imageRows) {
+            imagesWithUrls = await Promise.all(
+              imageRows.map(async (img: any) => {
+                const { data: signed } = await supabase.storage
+                  .from('expense-images')
+                  .createSignedUrl(img.path, 60 * 60)
+                return { ...img, url: signed?.signedUrl || null }
+              })
+            )
+          } else if (imageError) {
+            console.warn('expense_images 로드 오류:', imageError)
+          }
+        } catch (err) {
+          console.warn('expense_images 테이블이 아직 없을 수 있습니다:', err)
+        }
+
         return {
           ...(expense as ExpenseRow),
-          participant_ids: participantData?.map(p => p.participant_id) || []
+          participant_ids: participantData?.map(p => p.participant_id) || [],
+          images: imagesWithUrls
         }
       })
     )
@@ -396,7 +420,7 @@ function App() {
     await loadParticipants()
   }
 
-  async function handleAddExpense(expenseData: { payerId: string; amount: number; description: string; participantIds: string[] }) {
+  async function handleAddExpense(expenseData: { payerId: string; amount: number; description: string; participantIds: string[]; images?: ExpenseImageInput[] }) {
     if (!tripId) return
     const current = participants.find(p => p.id === user?.id)
     if (!current?.is_treasurer) {
@@ -433,6 +457,46 @@ function App() {
       alert('결제 추가에 실패했습니다.')
       return
     }
+
+    const images = expenseData.images || []
+    if (images.length > 0) {
+      const uploadedRows: any[] = []
+      for (const img of images) {
+        try {
+          const path = `${tripId}/${newExpense.id}/${crypto.randomUUID()}.jpg`
+          const { error: uploadError } = await supabase.storage
+            .from('expense-images')
+            .upload(path, img.blob, {
+              contentType: img.mimeType || 'image/jpeg',
+              upsert: false
+            })
+          if (uploadError) {
+            console.error('이미지 업로드 오류:', uploadError)
+            continue
+          }
+          uploadedRows.push({
+            expense_id: newExpense.id,
+            path,
+            mime_type: img.mimeType,
+            size: img.size,
+            width: img.width,
+            height: img.height
+          })
+        } catch (err) {
+          console.error('이미지 업로드 처리 오류:', err)
+        }
+      }
+
+      if (uploadedRows.length > 0) {
+        const { error: insertImagesError } = await supabase
+          .from('expense_images')
+          .insert(uploadedRows)
+        if (insertImagesError) {
+          console.error('expense_images 저장 오류:', insertImagesError)
+        }
+      }
+    }
+
     await loadExpenses()
   }
 

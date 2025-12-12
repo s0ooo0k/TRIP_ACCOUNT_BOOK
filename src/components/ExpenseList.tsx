@@ -56,6 +56,28 @@ export function ExpenseList({ expenses, participants, onDelete, showDelete = fal
                   등록자: {participantMap.get(expense.created_by) || '알 수 없음'}
                 </div>
               )}
+              {expense.images && expense.images.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {expense.images
+                    .filter(img => !!img.url)
+                    .map((img) => (
+                      <a
+                        key={img.id || img.path}
+                        href={img.url as string}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block"
+                        title="이미지 보기"
+                      >
+                        <img
+                          src={img.url as string}
+                          alt="receipt"
+                          className="h-16 w-16 object-cover rounded-md border border-orange-100"
+                        />
+                      </a>
+                    ))}
+                </div>
+              )}
             </div>
 
             {showDelete && onDelete && (
