@@ -37,6 +37,18 @@ export interface ParticipantAccount {
   updated_at?: string
 }
 
+export interface TripTreasuryAccount {
+  id: string
+  trip_id: string
+  treasurer_id?: string | null
+  bank_name: string
+  account_number: string
+  account_holder: string
+  memo?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
 export interface DuesGoal {
   id: string
   trip_id: string

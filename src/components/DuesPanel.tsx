@@ -1,10 +1,10 @@
 // @ts-nocheck
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { formatCurrency, DuesGoal, Participant, TreasuryTx } from '@/utils/settlement'
+import { formatCurrency, DuesGoal, Participant, TreasuryTx, TripTreasuryAccount } from '@/utils/settlement'
 import { Select } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 
@@ -13,11 +13,13 @@ type Props = {
   participants: Participant[]
   treasury: TreasuryTx[]
   isTreasurer: boolean
+  tripTreasuryAccount?: TripTreasuryAccount | null
+  onUpsertTripTreasuryAccount?: (data: { bankName: string; accountNumber: string; accountHolder: string; memo?: string }) => void
   onAddDue: (data: { title: string; dueDate: string | null; target: number }) => void
   onAddTreasury: (data: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string }) => void
 }
 
-export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue, onAddTreasury }: Props) {
+export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreasuryAccount, onUpsertTripTreasuryAccount, onAddDue, onAddTreasury }: Props) {
   const [title, setTitle] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [target, setTarget] = useState('')
@@ -25,6 +27,25 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue,
   const [amount, setAmount] = useState('')
   const [selectedCounterparties, setSelectedCounterparties] = useState<Set<string>>(new Set())
   const [memo, setMemo] = useState('')
+
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [accountHolder, setAccountHolder] = useState('')
+  const [accountMemo, setAccountMemo] = useState('')
+
+  useEffect(() => {
+    if (tripTreasuryAccount) {
+      setBankName(tripTreasuryAccount.bank_name || '')
+      setAccountNumber(tripTreasuryAccount.account_number || '')
+      setAccountHolder(tripTreasuryAccount.account_holder || '')
+      setAccountMemo(tripTreasuryAccount.memo || '')
+    } else {
+      setBankName('')
+      setAccountNumber('')
+      setAccountHolder('')
+      setAccountMemo('')
+    }
+  }, [tripTreasuryAccount?.id])
 
   const dueStats = useMemo(() => {
     const map = new Map<string, number>()
@@ -98,8 +119,72 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, onAddDue,
     }
   }
 
+  const handleSaveTreasuryAccount = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!onUpsertTripTreasuryAccount) return
+    if (!bankName.trim() || !accountNumber.trim() || !accountHolder.trim()) {
+      alert('은행명, 계좌번호, 예금주를 모두 입력해주세요.')
+      return
+    }
+    onUpsertTripTreasuryAccount({
+      bankName: bankName.trim(),
+      accountNumber: accountNumber.trim(),
+      accountHolder: accountHolder.trim(),
+      memo: accountMemo.trim() || undefined
+    })
+  }
+
   return (
     <div className="space-y-4">
+      <Card className="bg-white/90 border-orange-100">
+        <CardHeader>
+          <CardTitle>회비 입금 계좌</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {tripTreasuryAccount ? (
+            <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-3 text-sm text-gray-900 space-y-1">
+              <div className="font-semibold">
+                {tripTreasuryAccount.bank_name} {tripTreasuryAccount.account_number}
+              </div>
+              <div className="text-xs text-gray-600">예금주: {tripTreasuryAccount.account_holder}</div>
+              {tripTreasuryAccount.memo && (
+                <div className="text-xs text-gray-600">{tripTreasuryAccount.memo}</div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">아직 공금 계좌가 설정되지 않았습니다.</p>
+          )}
+
+          {isTreasurer ? (
+            <form onSubmit={handleSaveTreasuryAccount} className="grid gap-3 sm:grid-cols-3 sm:gap-4 pt-2 border-t border-orange-100">
+              <div className="space-y-2">
+                <Label>은행명</Label>
+                <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="예: 국민은행" />
+              </div>
+              <div className="space-y-2">
+                <Label>계좌번호</Label>
+                <Input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} placeholder="예: 123-456-7890" />
+              </div>
+              <div className="space-y-2">
+                <Label>예금주</Label>
+                <Input value={accountHolder} onChange={(e) => setAccountHolder(e.target.value)} placeholder="예: 홍길동" />
+              </div>
+              <div className="sm:col-span-3 space-y-2">
+                <Label>메모 (선택)</Label>
+                <Input value={accountMemo} onChange={(e) => setAccountMemo(e.target.value)} placeholder="예: 회비 입금용 계좌" />
+              </div>
+              <div className="sm:col-span-3">
+                <Button type="submit" className="w-full sm:w-auto">
+                  {tripTreasuryAccount ? '수정 저장' : '계좌 설정'}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <p className="text-xs text-gray-500">* 공금 계좌는 총무만 설정/수정할 수 있습니다.</p>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>회비 목표</CardTitle>

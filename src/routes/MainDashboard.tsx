@@ -19,11 +19,13 @@ export function MainDashboard({
   treasury,
   dues,
   accounts,
+  tripTreasuryAccount,
   onAddExpense,
   onDeleteExpense,
   onAddTreasury,
   onAddDue,
   onUpsertAccount,
+  onUpsertTripTreasuryAccount,
   onLogout,
 }: any) {
   const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
@@ -176,6 +178,8 @@ export function MainDashboard({
               isTreasurer={participants.find((p: any) => p.id === user.id)?.is_treasurer}
               onAddDue={onAddDue}
               onAddTreasury={onAddTreasury}
+              tripTreasuryAccount={tripTreasuryAccount}
+              onUpsertTripTreasuryAccount={onUpsertTripTreasuryAccount}
             />
           )}
 

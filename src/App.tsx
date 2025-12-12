@@ -6,7 +6,7 @@ import { Login } from './components/Login'
 import { AdminPage } from './pages/AdminPage'
 import { MainDashboard } from './routes/MainDashboard'
 import { calculateSettlements } from './utils/settlement'
-import type { Expense, Participant, TreasuryTx, DuesGoal, ParticipantAccount } from './utils/settlement'
+import type { Expense, Participant, TreasuryTx, DuesGoal, ParticipantAccount, TripTreasuryAccount } from './utils/settlement'
 import type { Database } from './lib/database.types'
 
 function App() {
@@ -19,6 +19,7 @@ function App() {
   const [role, setRole] = useState<'user' | 'admin'>('user')
   const [treasury, setTreasury] = useState<TreasuryTx[]>([])
   const [accounts, setAccounts] = useState<ParticipantAccount[]>([])
+  const [tripTreasuryAccount, setTripTreasuryAccount] = useState<TripTreasuryAccount | null>(null)
   const [loading, setLoading] = useState(true)
 
   const settlements = calculateSettlements(participants, expenses)
@@ -98,6 +99,7 @@ function App() {
           await loadParticipants(savedTripId)
           await loadExpenses(savedTripId)
           await loadAccounts(savedTripId)
+          await loadTripTreasuryAccount(savedTripId)
           await loadDues(savedTripId)
           await loadTreasury(savedTripId)
         } else {
@@ -158,6 +160,7 @@ function App() {
     await syncRole()
     await loadParticipants(selectedTrip.id)
     await loadAccounts(selectedTrip.id)
+    await loadTripTreasuryAccount(selectedTrip.id)
     await loadExpenses(selectedTrip.id)
     await loadDues(selectedTrip.id)
     await loadTreasury(selectedTrip.id)
@@ -171,6 +174,7 @@ function App() {
     setParticipants([])
     setExpenses([])
     setAccounts([])
+    setTripTreasuryAccount(null)
     clearLocalSession()
   }
 
@@ -269,6 +273,53 @@ function App() {
       return
     }
     setAccounts((data || []) as ParticipantAccount[])
+  }
+
+  async function loadTripTreasuryAccount(id?: string) {
+    const targetId = id || tripId
+    if (!targetId) return
+    const { data, error } = await supabase
+      .from('trip_treasury_accounts')
+      .select('*')
+      .eq('trip_id', targetId)
+      .maybeSingle()
+    if (error) {
+      console.error('공금 계좌 로드 오류:', error)
+      return
+    }
+    setTripTreasuryAccount((data as TripTreasuryAccount) || null)
+  }
+
+  async function handleUpsertTripTreasuryAccount(data: {
+    bankName: string
+    accountNumber: string
+    accountHolder: string
+    memo?: string
+  }) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 공금 계좌를 설정할 수 있습니다.')
+      return
+    }
+    const payload = {
+      trip_id: tripId,
+      treasurer_id: current.id,
+      bank_name: data.bankName,
+      account_number: data.accountNumber,
+      account_holder: data.accountHolder,
+      memo: data.memo || null
+    }
+    const { error } = await supabase
+      .from('trip_treasury_accounts')
+      .upsert(payload, { onConflict: 'trip_id' })
+    if (error) {
+      console.error('공금 계좌 저장 오류:', error)
+      alert('공금 계좌를 저장하지 못했습니다.')
+      return
+    }
+    await loadTripTreasuryAccount()
+    alert('공금 계좌를 저장했습니다.')
   }
 
   async function handleUpsertAccount(data: {
@@ -490,11 +541,13 @@ function App() {
               treasury={treasury}
               dues={dues}
               accounts={accounts}
+              tripTreasuryAccount={tripTreasuryAccount}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
               onAddTreasury={handleAddTreasury}
               onAddDue={handleAddDue}
               onUpsertAccount={handleUpsertAccount}
+              onUpsertTripTreasuryAccount={handleUpsertTripTreasuryAccount}
               onLogout={handleLogout}
             />
           ) : (
