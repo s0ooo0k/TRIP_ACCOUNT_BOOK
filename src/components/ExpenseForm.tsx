@@ -277,7 +277,7 @@ export function ExpenseForm({ participants, currentParticipantId, onAdd }: Props
               {selectedParticipants.size === participants.length ? '전체 해제' : '전체 선택'}
             </Button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {participants.map((p) => {
               const active = selectedParticipants.has(p.id)
               return (
@@ -285,8 +285,9 @@ export function ExpenseForm({ participants, currentParticipantId, onAdd }: Props
                   key={p.id}
                   type="button"
                   variant={active ? "default" : "outline"}
+                  size="sm"
                   className={cn(
-                    "justify-start",
+                    "justify-start text-sm",
                     active
                       ? "bg-amber-400 hover:bg-amber-500 text-orange-950 border-amber-400"
                       : "border-gray-200 text-gray-800 hover:border-orange-200 hover:text-orange-700"
