@@ -6,7 +6,7 @@ import { Login } from './components/Login'
 import { AdminPage } from './pages/AdminPage'
 import { MainDashboard } from './routes/MainDashboard'
 import { calculateSettlements } from './utils/settlement'
-import type { Expense, Participant, TreasuryTx, DuesGoal } from './utils/settlement'
+import type { Expense, Participant, TreasuryTx, DuesGoal, ParticipantAccount } from './utils/settlement'
 import type { Database } from './lib/database.types'
 
 function App() {
@@ -18,6 +18,7 @@ function App() {
   const [user, setUser] = useState<{ id: string; name: string } | null>(null)
   const [role, setRole] = useState<'user' | 'admin'>('user')
   const [treasury, setTreasury] = useState<TreasuryTx[]>([])
+  const [accounts, setAccounts] = useState<ParticipantAccount[]>([])
   const [loading, setLoading] = useState(true)
 
   const settlements = calculateSettlements(participants, expenses)
@@ -96,6 +97,7 @@ function App() {
           await syncRole()
           await loadParticipants(savedTripId)
           await loadExpenses(savedTripId)
+          await loadAccounts(savedTripId)
           await loadDues(savedTripId)
           await loadTreasury(savedTripId)
         } else {
@@ -155,6 +157,7 @@ function App() {
 
     await syncRole()
     await loadParticipants(selectedTrip.id)
+    await loadAccounts(selectedTrip.id)
     await loadExpenses(selectedTrip.id)
     await loadDues(selectedTrip.id)
     await loadTreasury(selectedTrip.id)
@@ -167,6 +170,7 @@ function App() {
     setRole('user')
     setParticipants([])
     setExpenses([])
+    setAccounts([])
     clearLocalSession()
   }
 
@@ -251,6 +255,55 @@ function App() {
       return
     }
     setTreasury(data || [])
+  }
+
+  async function loadAccounts(id?: string) {
+    const targetId = id || tripId
+    if (!targetId) return
+    const { data, error } = await supabase
+      .from('participant_accounts')
+      .select('*')
+      .order('created_at', { ascending: true })
+    if (error) {
+      console.error('계좌 정보 로드 오류:', error)
+      return
+    }
+    setAccounts((data || []) as ParticipantAccount[])
+  }
+
+  async function handleUpsertAccount(data: {
+    bankName: string
+    accountNumber: string
+    accountHolder: string
+    isPublic: boolean
+  }) {
+    if (!user) return
+    const payload = {
+      participant_id: user.id,
+      bank_name: data.bankName,
+      account_number: data.accountNumber,
+      account_holder: data.accountHolder,
+      is_public: data.isPublic
+    }
+    const { error } = await supabase
+      .from('participant_accounts')
+      .upsert(payload, { onConflict: 'participant_id' })
+    if (error) {
+      console.error('계좌 정보 저장 오류:', error)
+      alert('계좌 정보를 저장하지 못했습니다.')
+      return
+    }
+
+    // 공개/비공개 여부와 관계없이 계좌 등록 여부만 표시할 수 있도록 플래그 업데이트
+    const { error: flagError } = await supabase
+      .from('participants')
+      .update({ has_account: true })
+      .eq('id', user.id)
+    if (flagError) {
+      console.error('has_account 업데이트 오류:', flagError)
+    }
+    await loadAccounts()
+    alert('계좌 정보를 저장했습니다.')
   }
 
   async function handleAddParticipant(name: string) {
@@ -436,10 +489,12 @@ function App() {
               role={role}
               treasury={treasury}
               dues={dues}
+              accounts={accounts}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
               onAddTreasury={handleAddTreasury}
               onAddDue={handleAddDue}
+              onUpsertAccount={handleUpsertAccount}
               onLogout={handleLogout}
             />
           ) : (

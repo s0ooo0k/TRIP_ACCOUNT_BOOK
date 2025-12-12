@@ -18,10 +18,12 @@ export function MainDashboard({
   role,
   treasury,
   dues,
+  accounts,
   onAddExpense,
   onDeleteExpense,
   onAddTreasury,
   onAddDue,
+  onUpsertAccount,
   onLogout,
 }: any) {
   const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
@@ -120,7 +122,12 @@ export function MainDashboard({
           )}
 
           {activeSection === 'participants' && (
-            <ParticipantManager participants={participants} />
+            <ParticipantManager
+              participants={participants}
+              currentParticipantId={user.id}
+              accounts={accounts}
+              onUpsertAccount={onUpsertAccount}
+            />
           )}
 
           {activeSection === 'expenses' && (

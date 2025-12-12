@@ -2,6 +2,7 @@ export interface Participant {
   id: string
   name: string
   is_treasurer?: boolean
+  has_account?: boolean
 }
 
 export interface Expense {
@@ -23,6 +24,17 @@ export interface TreasuryTx {
   memo: string | null
   created_at?: string
   due_id?: string | null
+}
+
+export interface ParticipantAccount {
+  id: string
+  participant_id: string
+  bank_name: string
+  account_number: string
+  account_holder: string
+  is_public: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface DuesGoal {
