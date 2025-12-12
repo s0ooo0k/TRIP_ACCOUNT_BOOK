@@ -15,7 +15,7 @@ interface Props {
     description: string
     participantIds: string[]
     images?: ExpenseImageInput[]
-  }) => void
+  }) => Promise<void>
 }
 
 export function ExpenseForm({ participants, currentParticipantId, onAdd }: Props) {
@@ -27,6 +27,7 @@ export function ExpenseForm({ participants, currentParticipantId, onAdd }: Props
   )
   const [images, setImages] = useState<(ExpenseImageInput & { previewUrl: string })[]>([])
   const [optimizing, setOptimizing] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const imagesRef = useRef(images)
   const MAX_IMAGES = 5
 
@@ -54,7 +55,7 @@ export function ExpenseForm({ participants, currentParticipantId, onAdd }: Props
 
   async function optimizeImage(file: File): Promise<ExpenseImageInput & { previewUrl: string }> {
     const maxDim = 1280
-    const quality = 0.7
+    const quality = 0.8
 
     let width = 0
     let height = 0
@@ -163,8 +164,9 @@ export function ExpenseForm({ participants, currentParticipantId, onAdd }: Props
     })
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (submitting) return
 
     if (!payerId || !amount || selectedParticipants.size === 0) {
       alert('모든 항목을 입력해주세요.')
@@ -177,19 +179,24 @@ export function ExpenseForm({ participants, currentParticipantId, onAdd }: Props
       return
     }
 
-    onAdd({
-      payerId,
-      amount: amountNum,
-      description: description || '기타',
-      participantIds: Array.from(selectedParticipants),
-      images: images.map(({ previewUrl, ...rest }) => rest)
-    })
+    setSubmitting(true)
+    try {
+      await onAdd({
+        payerId,
+        amount: amountNum,
+        description: description || '기타',
+        participantIds: Array.from(selectedParticipants),
+        images: images.map(({ previewUrl, ...rest }) => rest)
+      })
 
-    // Reset form
-    setAmount('')
-    setDescription('')
-    images.forEach(img => URL.revokeObjectURL(img.previewUrl))
-    setImages([])
+      // Reset form
+      setAmount('')
+      setDescription('')
+      images.forEach(img => URL.revokeObjectURL(img.previewUrl))
+      setImages([])
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const toggleParticipant = (id: string) => {
@@ -332,8 +339,8 @@ export function ExpenseForm({ participants, currentParticipantId, onAdd }: Props
           </div>
         </div>
 
-        <Button type="submit" className="w-full">
-          추가
+        <Button type="submit" className="w-full" disabled={submitting || optimizing}>
+          {submitting ? (images.length > 0 ? '업로드 중...' : '추가 중...') : '추가'}
         </Button>
       </form>
     </div>
