@@ -7,6 +7,7 @@ import { ExpenseList } from '@/components/ExpenseList'
 import { SettlementGuide } from '@/components/SettlementGuide'
 import { Treasury } from '@/components/Treasury'
 import { DuesPanel } from '@/components/DuesPanel'
+import { DeletedRecordsPanel } from '@/components/DeletedRecordsPanel'
 
 export function MainDashboard({
   tripId,
@@ -22,6 +23,14 @@ export function MainDashboard({
   tripTreasuryAccount,
   onAddExpense,
   onDeleteExpense,
+  onDeleteDue,
+  onDeleteTreasuryTx,
+  deletedExpenses,
+  deletedDues,
+  deletedTreasury,
+  onRestoreExpense,
+  onRestoreDue,
+  onRestoreTreasury,
   onAddTreasury,
   onAddDue,
   onUpsertAccount,
@@ -30,13 +39,15 @@ export function MainDashboard({
 }: any) {
   const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
   const [activeSection, setActiveSection] = useState<'summary' | 'participants' | 'expenses' | 'settlement' | 'dues'>('expenses')
+  const isTreasurer = participants.find((p: any) => p.id === user.id)?.is_treasurer
 
   const sections = [
     { id: 'expenses', label: '지출' },
     { id: 'dues', label: '회비' },
     { id: 'summary', label: '요약' },
     { id: 'participants', label: '참여자' },
-    { id: 'settlement', label: '정산' }
+    { id: 'settlement', label: '정산' },
+    ...(isTreasurer ? [{ id: 'deleted', label: '삭제내역' }] : [])
   ]
 
   return (
@@ -146,7 +157,12 @@ export function MainDashboard({
                 </div>
               )}
 
-              <ExpenseList expenses={expenses} participants={participants} />
+              <ExpenseList
+                expenses={expenses}
+                participants={participants}
+                onDelete={onDeleteExpense}
+                showDelete={!!isTreasurer}
+              />
             </div>
           )}
 
@@ -160,8 +176,9 @@ export function MainDashboard({
               <Treasury
                 participants={participants}
                 treasury={treasury}
-                isTreasurer={participants.find((p: any) => p.id === user.id)?.is_treasurer}
+                isTreasurer={!!isTreasurer}
                 onAdd={onAddTreasury}
+                onDeleteTx={onDeleteTreasuryTx}
               />
             </div>
           )}
@@ -175,11 +192,25 @@ export function MainDashboard({
               dues={dues}
               participants={participants}
               treasury={treasury}
-              isTreasurer={participants.find((p: any) => p.id === user.id)?.is_treasurer}
+              isTreasurer={!!isTreasurer}
               onAddDue={onAddDue}
               onAddTreasury={onAddTreasury}
               tripTreasuryAccount={tripTreasuryAccount}
               onUpsertTripTreasuryAccount={onUpsertTripTreasuryAccount}
+              onDeleteDue={onDeleteDue}
+              onDeleteTreasuryTx={onDeleteTreasuryTx}
+            />
+          )}
+
+          {activeSection === 'deleted' && isTreasurer && (
+            <DeletedRecordsPanel
+              participants={participants}
+              deletedExpenses={deletedExpenses || []}
+              deletedDues={deletedDues || []}
+              deletedTreasury={deletedTreasury || []}
+              onRestoreExpense={onRestoreExpense}
+              onRestoreDue={onRestoreDue}
+              onRestoreTreasury={onRestoreTreasury}
             />
           )}
 

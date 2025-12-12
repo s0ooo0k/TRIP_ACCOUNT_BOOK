@@ -17,9 +17,11 @@ type Props = {
   onUpsertTripTreasuryAccount?: (data: { bankName: string; accountNumber: string; accountHolder: string; memo?: string }) => void
   onAddDue: (data: { title: string; dueDate: string | null; target: number }) => void
   onAddTreasury: (data: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string }) => void
+  onDeleteDue?: (id: string) => void
+  onDeleteTreasuryTx?: (id: string) => void
 }
 
-export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreasuryAccount, onUpsertTripTreasuryAccount, onAddDue, onAddTreasury }: Props) {
+export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreasuryAccount, onUpsertTripTreasuryAccount, onAddDue, onAddTreasury, onDeleteDue, onDeleteTreasuryTx }: Props) {
   const [title, setTitle] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [target, setTarget] = useState('')
@@ -223,7 +225,21 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreas
                 <div key={d.id} className="rounded-lg border border-orange-100 bg-white p-4 shadow-sm space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="font-semibold text-gray-900">{d.title}</div>
-                    <div className="text-xs text-gray-500">{d.due_date || '마감일 없음'}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-gray-500">{d.due_date || '마감일 없음'}</div>
+                      {isTreasurer && onDeleteDue && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-gray-400 hover:text-red-600"
+                          onClick={() => onDeleteDue(d.id)}
+                          title="삭제"
+                        >
+                          삭제
+                        </Button>
+                      )}
+                    </div>
                   </div>
                   <div className="text-sm text-gray-700">인당: {formatCurrency(d.target_amount)}원</div>
                   <div className="text-sm text-gray-700">총 목표: {formatCurrency(totalTarget)}원</div>
@@ -327,7 +343,21 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreas
                       {dues.find(d => d.id === t.due_id)?.title || '회비'} · {participants.find(p => p.id === t.counterparty_id)?.name || '알 수 없음'}
                       {t.memo && <span className="text-xs text-gray-500"> · {t.memo}</span>}
                     </div>
-                    <div className="text-emerald-700 font-semibold">+{formatCurrency(t.amount)}원</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-emerald-700 font-semibold">+{formatCurrency(t.amount)}원</div>
+                      {isTreasurer && onDeleteTreasuryTx && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-gray-400 hover:text-red-600"
+                          onClick={() => onDeleteTreasuryTx(t.id)}
+                          title="삭제"
+                        >
+                          삭제
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))
             )}

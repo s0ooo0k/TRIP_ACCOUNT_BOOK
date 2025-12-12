@@ -14,9 +14,10 @@ type Props = {
   isTreasurer: boolean
   dues?: DuesGoal[]
   onAdd: (tx: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string }) => void
+  onDeleteTx?: (id: string) => void
 }
 
-export function Treasury({ participants, treasury, isTreasurer, onAdd, dues = [] }: Props) {
+export function Treasury({ participants, treasury, isTreasurer, onAdd, onDeleteTx, dues = [] }: Props) {
   const [direction, setDirection] = useState<'receive' | 'send'>('receive')
   const [counterpartyId, setCounterpartyId] = useState(participants[0]?.id || '')
   const [amount, setAmount] = useState('')
@@ -120,11 +121,24 @@ export function Treasury({ participants, treasury, isTreasurer, onAdd, dues = []
                   </div>
                   {tx.memo && <div className="text-xs text-gray-500">{tx.memo}</div>}
                 </div>
-                <div className={cn(
-                  "font-semibold",
-                  tx.direction === 'receive' ? 'text-emerald-700' : 'text-orange-700'
-                )}>
-                  {tx.direction === 'receive' ? '+' : '-'}{formatCurrency(tx.amount)}원
+                <div className="flex items-center gap-2">
+                  <div className={cn(
+                    "font-semibold",
+                    tx.direction === 'receive' ? 'text-emerald-700' : 'text-orange-700'
+                  )}>
+                    {tx.direction === 'receive' ? '+' : '-'}{formatCurrency(tx.amount)}원
+                  </div>
+                  {isTreasurer && onDeleteTx && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-400 hover:text-red-600"
+                      onClick={() => onDeleteTx(tx.id)}
+                      title="삭제"
+                    >
+                      삭제
+                    </Button>
+                  )}
                 </div>
               </div>
             ))

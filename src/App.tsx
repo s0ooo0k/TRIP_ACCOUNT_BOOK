@@ -20,6 +20,9 @@ function App() {
   const [treasury, setTreasury] = useState<TreasuryTx[]>([])
   const [accounts, setAccounts] = useState<ParticipantAccount[]>([])
   const [tripTreasuryAccount, setTripTreasuryAccount] = useState<TripTreasuryAccount | null>(null)
+  const [deletedExpenses, setDeletedExpenses] = useState<Expense[]>([])
+  const [deletedDues, setDeletedDues] = useState<DuesGoal[]>([])
+  const [deletedTreasury, setDeletedTreasury] = useState<TreasuryTx[]>([])
   const [loading, setLoading] = useState(true)
 
   const settlements = calculateSettlements(participants, expenses)
@@ -46,6 +49,7 @@ function App() {
       .channel('expenses_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `trip_id=eq.${tripId}` }, () => {
         loadExpenses()
+        loadDeletedExpenses()
       })
       .subscribe()
     return () => { void supabase.removeChannel(channel) }
@@ -98,10 +102,13 @@ function App() {
           await syncRole()
           await loadParticipants(savedTripId)
           await loadExpenses(savedTripId)
+          await loadDeletedExpenses(savedTripId)
           await loadAccounts(savedTripId)
           await loadTripTreasuryAccount(savedTripId)
           await loadDues(savedTripId)
+          await loadDeletedDues(savedTripId)
           await loadTreasury(savedTripId)
+          await loadDeletedTreasury(savedTripId)
         } else {
           clearLocalSession()
         }
@@ -208,6 +215,7 @@ function App() {
       .from('expenses')
       .select('*')
       .eq('trip_id', targetId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false }) as { data: ExpenseRow[] | null; error: any }
     if (expensesError) {
       console.error('결제 내역 로드 오류:', expensesError)
@@ -255,6 +263,59 @@ function App() {
     setExpenses(expensesWithParticipants)
   }
 
+  async function loadDeletedExpenses(id?: string) {
+    const targetId = id || tripId
+    if (!targetId) return
+    const { data: expensesData, error: expensesError } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('trip_id', targetId)
+      .eq('is_deleted', true)
+      .order('deleted_at', { ascending: false })
+    if (expensesError) {
+      console.error('삭제된 결제 내역 로드 오류:', expensesError)
+      return
+    }
+
+    const expensesWithParticipants = await Promise.all(
+      (expensesData || []).map(async (expense: any) => {
+        const { data: participantData } = await supabase
+          .from('expense_participants')
+          .select('participant_id')
+          .eq('expense_id', expense.id)
+
+        let imagesWithUrls: any[] = []
+        try {
+          const { data: imageRows } = await supabase
+            .from('expense_images')
+            .select('*')
+            .eq('expense_id', expense.id)
+            .order('created_at', { ascending: true })
+          if (imageRows) {
+            imagesWithUrls = await Promise.all(
+              imageRows.map(async (img: any) => {
+                const { data: signed } = await supabase.storage
+                  .from('expense-images')
+                  .createSignedUrl(img.path, 60 * 60)
+                return { ...img, url: signed?.signedUrl || null }
+              })
+            )
+          }
+        } catch (err) {
+          console.warn('expense_images 로드 오류:', err)
+        }
+
+        return {
+          ...(expense as any),
+          participant_ids: participantData?.map((p: any) => p.participant_id) || [],
+          images: imagesWithUrls
+        }
+      })
+    )
+
+    setDeletedExpenses(expensesWithParticipants as any)
+  }
+
   async function loadDues(id?: string) {
     const targetId = id || tripId
     if (!targetId) return
@@ -262,12 +323,29 @@ function App() {
       .from('dues')
       .select('*')
       .eq('trip_id', targetId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false })
     if (error) {
       console.error('회비 목표 로드 오류:', error)
       return
     }
     setDues((data || []) as DuesGoal[])
+  }
+
+  async function loadDeletedDues(id?: string) {
+    const targetId = id || tripId
+    if (!targetId) return
+    const { data, error } = await supabase
+      .from('dues')
+      .select('*')
+      .eq('trip_id', targetId)
+      .eq('is_deleted', true)
+      .order('deleted_at', { ascending: false })
+    if (error) {
+      console.error('삭제된 회비 목표 로드 오류:', error)
+      return
+    }
+    setDeletedDues((data || []) as any)
   }
 
   async function loadTreasury(id?: string) {
@@ -277,12 +355,29 @@ function App() {
       .from('treasury_transactions')
       .select('*')
       .eq('trip_id', targetId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: false })
     if (error) {
       console.error('정산 기록 로드 오류:', error)
       return
     }
     setTreasury(data || [])
+  }
+
+  async function loadDeletedTreasury(id?: string) {
+    const targetId = id || tripId
+    if (!targetId) return
+    const { data, error } = await supabase
+      .from('treasury_transactions')
+      .select('*')
+      .eq('trip_id', targetId)
+      .eq('is_deleted', true)
+      .order('deleted_at', { ascending: false })
+    if (error) {
+      console.error('삭제된 정산 기록 로드 오류:', error)
+      return
+    }
+    setDeletedTreasury(data || [])
   }
 
   async function loadAccounts(id?: string) {
@@ -550,9 +645,21 @@ function App() {
   }
 
   async function handleDeleteExpense(id: string) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 삭제할 수 있습니다.')
+      return
+    }
+    const ok = window.confirm('이 지출을 삭제할까요? 삭제된 내역 탭에서 복구할 수 있습니다.')
+    if (!ok) return
     const { error } = await supabase
       .from('expenses')
-      .delete()
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        deleted_by: user.id
+      })
       .eq('id', id)
     if (error) {
       console.error('결제 삭제 오류:', error)
@@ -560,6 +667,129 @@ function App() {
       return
     }
     await loadExpenses()
+    await loadDeletedExpenses()
+  }
+
+  async function handleRestoreExpense(id: string) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 복구할 수 있습니다.')
+      return
+    }
+    const ok = window.confirm('이 지출을 복구할까요?')
+    if (!ok) return
+    const { error } = await supabase
+      .from('expenses')
+      .update({
+        is_deleted: false,
+        deleted_at: null,
+        deleted_by: null
+      })
+      .eq('id', id)
+    if (error) {
+      console.error('결제 복구 오류:', error)
+      alert('결제 복구에 실패했습니다.')
+      return
+    }
+    await loadExpenses()
+    await loadDeletedExpenses()
+  }
+
+  async function handleDeleteDue(id: string) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 삭제할 수 있습니다.')
+      return
+    }
+    const ok = window.confirm('이 회비 목표를 삭제할까요? 삭제된 내역 탭에서 복구할 수 있습니다.')
+    if (!ok) return
+    const { error } = await supabase
+      .from('dues')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        deleted_by: user.id
+      })
+      .eq('id', id)
+    if (error) {
+      console.error('회비 목표 삭제 오류:', error)
+      alert('회비 목표 삭제에 실패했습니다.')
+      return
+    }
+    await loadDues()
+    await loadDeletedDues()
+  }
+
+  async function handleRestoreDue(id: string) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 복구할 수 있습니다.')
+      return
+    }
+    const ok = window.confirm('이 회비 목표를 복구할까요?')
+    if (!ok) return
+    const { error } = await supabase
+      .from('dues')
+      .update({ is_deleted: false, deleted_at: null, deleted_by: null })
+      .eq('id', id)
+    if (error) {
+      console.error('회비 목표 복구 오류:', error)
+      alert('회비 목표 복구에 실패했습니다.')
+      return
+    }
+    await loadDues()
+    await loadDeletedDues()
+  }
+
+  async function handleDeleteTreasuryTx(id: string) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 삭제할 수 있습니다.')
+      return
+    }
+    const ok = window.confirm('이 정산/입출금 기록을 삭제할까요? 삭제된 내역 탭에서 복구할 수 있습니다.')
+    if (!ok) return
+    const { error } = await supabase
+      .from('treasury_transactions')
+      .update({
+        is_deleted: true,
+        deleted_at: new Date().toISOString(),
+        deleted_by: user.id
+      })
+      .eq('id', id)
+    if (error) {
+      console.error('정산 기록 삭제 오류:', error)
+      alert('정산 기록 삭제에 실패했습니다.')
+      return
+    }
+    await loadTreasury()
+    await loadDeletedTreasury()
+  }
+
+  async function handleRestoreTreasuryTx(id: string) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 복구할 수 있습니다.')
+      return
+    }
+    const ok = window.confirm('이 정산/입출금 기록을 복구할까요?')
+    if (!ok) return
+    const { error } = await supabase
+      .from('treasury_transactions')
+      .update({ is_deleted: false, deleted_at: null, deleted_by: null })
+      .eq('id', id)
+    if (error) {
+      console.error('정산 기록 복구 오류:', error)
+      alert('정산 기록 복구에 실패했습니다.')
+      return
+    }
+    await loadTreasury()
+    await loadDeletedTreasury()
   }
 
   if (loading) {
@@ -608,6 +838,14 @@ function App() {
               tripTreasuryAccount={tripTreasuryAccount}
               onAddExpense={handleAddExpense}
               onDeleteExpense={handleDeleteExpense}
+              onDeleteDue={handleDeleteDue}
+              onDeleteTreasuryTx={handleDeleteTreasuryTx}
+              deletedExpenses={deletedExpenses}
+              deletedDues={deletedDues}
+              deletedTreasury={deletedTreasury}
+              onRestoreExpense={handleRestoreExpense}
+              onRestoreDue={handleRestoreDue}
+              onRestoreTreasury={handleRestoreTreasuryTx}
               onAddTreasury={handleAddTreasury}
               onAddDue={handleAddDue}
               onUpsertAccount={handleUpsertAccount}

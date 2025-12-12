@@ -13,6 +13,9 @@ export interface Expense {
   participant_ids: string[]
   created_by?: string | null
   images?: ExpenseImage[]
+  is_deleted?: boolean
+  deleted_at?: string | null
+  deleted_by?: string | null
 }
 
 export interface ExpenseImage {
@@ -46,6 +49,9 @@ export interface TreasuryTx {
   memo: string | null
   created_at?: string
   due_id?: string | null
+  is_deleted?: boolean
+  deleted_at?: string | null
+  deleted_by?: string | null
 }
 
 export interface ParticipantAccount {
@@ -78,6 +84,9 @@ export interface DuesGoal {
   due_date: string | null
   target_amount: number
   created_at?: string
+  is_deleted?: boolean
+  deleted_at?: string | null
+  deleted_by?: string | null
 }
 
 export interface PersonalSettlement {
