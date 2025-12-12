@@ -1,15 +1,23 @@
-import type { Participant, Expense } from '../utils/settlement'
+import { useMemo, useState } from 'react'
+import type { Participant, Expense, TreasuryTx } from '../utils/settlement'
 import { formatCurrency } from '../utils/settlement'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
 
 interface Props {
   participants: Participant[]
   expenses: Expense[]
+  treasury?: TreasuryTx[]
 }
 
 type NetBalance = { id: string; name: string; balance: number }
 
-function computeNetBalances(participants: Participant[], expenses: Expense[]): NetBalance[] {
+function computeNetBalances(
+  participants: Participant[],
+  expenses: Expense[],
+  treasury: TreasuryTx[] = []
+): NetBalance[] {
   const map = new Map<string, { name: string; balance: number }>()
   participants.forEach(p => map.set(p.id, { name: p.name, balance: 0 }))
 
@@ -25,6 +33,15 @@ function computeNetBalances(participants: Participant[], expenses: Expense[]): N
     })
   })
 
+  // 총무에게 이미 낸 금액(받기)과 돌려받은 금액(보내기)을 반영
+  treasury.forEach(tx => {
+    if (!tx.counterparty_id) return
+    const entry = map.get(tx.counterparty_id)
+    if (!entry) return
+    if (tx.direction === 'receive') entry.balance += tx.amount
+    else if (tx.direction === 'send') entry.balance -= tx.amount
+  })
+
   return Array.from(map.entries()).map(([id, { name, balance }]) => ({
     id,
     name,
@@ -32,8 +49,15 @@ function computeNetBalances(participants: Participant[], expenses: Expense[]): N
   }))
 }
 
-export function SettlementGuide({ participants, expenses }: Props) {
-  const net = computeNetBalances(participants, expenses)
+export function SettlementGuide({ participants, expenses, treasury = [] }: Props) {
+  const [includeDues, setIncludeDues] = useState(true)
+
+  const treasuryForCalc = useMemo(
+    () => (includeDues ? treasury : treasury.filter(tx => !tx.due_id)),
+    [includeDues, treasury]
+  )
+
+  const net = computeNetBalances(participants, expenses, treasuryForCalc)
   const receivers = net.filter(n => n.balance > 0)
   const payers = net.filter(n => n.balance < 0)
 
@@ -58,6 +82,14 @@ export function SettlementGuide({ participants, expenses }: Props) {
         <CardTitle>정산 안내 (총무 일괄 정산)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="flex items-center justify-end gap-2 text-sm text-gray-700">
+          <Checkbox
+            id="include-dues"
+            checked={includeDues}
+            onChange={(e) => setIncludeDues(e.target.checked)}
+          />
+          <Label htmlFor="include-dues" className="cursor-pointer">회비 포함</Label>
+        </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-lg border border-orange-100 bg-orange-50/60 p-4">
             <div className="flex items-center justify-between mb-3">
@@ -102,7 +134,9 @@ export function SettlementGuide({ participants, expenses }: Props) {
           <p className="text-orange-700 font-medium">
             위 금액대로 총무가 모아서 보내면 정산 완료!
           </p>
-          <p className="text-xs text-gray-600 mt-1">* 정밀 계산은 모든 지출을 반영한 순수 잔액 기준입니다.</p>
+          <p className="text-xs text-gray-600 mt-1">
+            * {includeDues ? '회비까지 포함' : '회비 제외'}한 잔액 기준입니다.
+          </p>
         </div>
       </CardContent>
     </Card>

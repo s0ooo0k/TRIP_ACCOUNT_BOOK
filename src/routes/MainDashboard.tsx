@@ -146,6 +146,7 @@ export function MainDashboard({
               <SettlementGuide
                 participants={participants}
                 expenses={expenses}
+                treasury={treasury}
               />
               <Treasury
                 participants={participants}
