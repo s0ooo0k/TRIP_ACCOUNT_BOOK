@@ -22,6 +22,7 @@ type Props = {
 }
 
 export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreasuryAccount, onUpsertTripTreasuryAccount, onAddDue, onAddTreasury, onDeleteDue, onDeleteTreasuryTx }: Props) {
+  const AUTO_DUE_ID = 'auto'
   const [title, setTitle] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [target, setTarget] = useState('')
@@ -71,6 +72,20 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreas
     return map
   }, [treasury])
 
+  const sortedDues = useMemo(() => {
+    return dues
+      .map((due, index) => {
+        const time = due.due_date ? new Date(due.due_date).getTime() : Number.POSITIVE_INFINITY
+        return { due, index, time: Number.isNaN(time) ? Number.POSITIVE_INFINITY : time }
+      })
+      .sort((a, b) => (a.time - b.time) || (a.index - b.index))
+      .map(item => item.due)
+  }, [dues])
+
+  const dueById = useMemo(() => {
+    return new Map(dues.map(d => [d.id, d]))
+  }, [dues])
+
   const handleAddDue = (e: React.FormEvent) => {
     e.preventDefault()
     const t = parseInt(target, 10)
@@ -91,16 +106,62 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreas
       alert('회비 항목, 입금자, 금액을 입력하세요.')
       return
     }
-    const memoText = memo || `회비 - ${dues.find(d => d.id === selectedDueId)?.title || ''}`
-    selectedCounterparties.forEach(pid => {
-      onAddTreasury({
-        direction: 'receive',
-        counterpartyId: pid,
-        amount: amt,
-        memo: memoText,
-        dueId: selectedDueId
+    if (selectedDueId === AUTO_DUE_ID) {
+      if (sortedDues.length === 0) {
+        alert('회비 목표가 없어서 자동 배분할 수 없습니다.')
+        return
+      }
+      const overLimit = []
+      selectedCounterparties.forEach(pid => {
+        let capacity = 0
+        sortedDues.forEach(due => {
+          const paid = perPersonPaid.get(due.id)?.get(pid) || 0
+          capacity += Math.max(due.target_amount - paid, 0)
+        })
+        if (amt > capacity) {
+          overLimit.push({ pid, capacity })
+        }
       })
-    })
+      if (overLimit.length > 0) {
+        const first = overLimit[0]
+        const name = participants.find(p => p.id === first.pid)?.name || '알 수 없음'
+        alert(`${name} 님의 남은 회비(${formatCurrency(first.capacity)}원)를 초과했습니다. 금액을 줄여주세요.`)
+        return
+      }
+
+      selectedCounterparties.forEach(pid => {
+        let remaining = amt
+        sortedDues.forEach(due => {
+          if (remaining <= 0) return
+          const paid = perPersonPaid.get(due.id)?.get(pid) || 0
+          const available = Math.max(due.target_amount - paid, 0)
+          if (available <= 0) return
+          const portion = Math.min(available, remaining)
+          if (portion <= 0) return
+          const memoText = memo || `회비 - ${due.title}`
+          onAddTreasury({
+            direction: 'receive',
+            counterpartyId: pid,
+            amount: portion,
+            memo: memoText,
+            dueId: due.id
+          })
+          remaining -= portion
+        })
+      })
+    } else {
+      const dueTitle = dueById.get(selectedDueId)?.title || ''
+      const memoText = memo || `회비 - ${dueTitle}`
+      selectedCounterparties.forEach(pid => {
+        onAddTreasury({
+          direction: 'receive',
+          counterpartyId: pid,
+          amount: amt,
+          memo: memoText,
+          dueId: selectedDueId
+        })
+      })
+    }
     setAmount('')
     setMemo('')
     // 선택 유지해서 연속 입력 가능
@@ -280,6 +341,7 @@ export function DuesPanel({ dues, participants, treasury, isTreasurer, tripTreas
                     <Label>회비 항목</Label>
                     <Select value={selectedDueId} onChange={(e) => setSelectedDueId(e.target.value)}>
                       <option value="">선택</option>
+                      <option value={AUTO_DUE_ID}>자동 배분</option>
                       {dues.map(d => (
                         <option key={d.id} value={d.id}>{d.title}</option>
                       ))}
