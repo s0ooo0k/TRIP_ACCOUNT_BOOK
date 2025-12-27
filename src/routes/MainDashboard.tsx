@@ -172,6 +172,7 @@ export function MainDashboard({
                 participants={participants}
                 expenses={expenses}
                 treasury={treasury}
+                currentParticipantId={user.id}
               />
               <Treasury
                 participants={participants}

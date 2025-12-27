@@ -46,9 +46,9 @@ export function Treasury({ participants, treasury, isTreasurer, onAdd, onDeleteT
   }
 
   return (
-    <Card>
+      <Card>
       <CardHeader>
-        <CardTitle>총무 입출금 기록</CardTitle>
+        <CardTitle>모임통장 입출금 기록</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
