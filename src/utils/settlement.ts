@@ -16,6 +16,9 @@ export interface Expense {
   is_deleted?: boolean
   deleted_at?: string | null
   deleted_by?: string | null
+  is_settled?: boolean
+  settled_at?: string | null
+  settled_by?: string | null
 }
 
 export interface ExpenseImage {
@@ -49,6 +52,7 @@ export interface TreasuryTx {
   memo: string | null
   created_at?: string
   due_id?: string | null
+  expense_id?: string | null
   is_deleted?: boolean
   deleted_at?: string | null
   deleted_by?: string | null

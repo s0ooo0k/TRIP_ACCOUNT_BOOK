@@ -16,7 +16,7 @@ type Props = {
   tripTreasuryAccount?: TripTreasuryAccount | null
   onUpsertTripTreasuryAccount?: (data: { bankName: string; accountNumber: string; accountHolder: string; memo?: string }) => void
   onAddDue: (data: { title: string; dueDate: string | null; target: number }) => void
-  onAddTreasury: (data: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string }) => void
+  onAddTreasury: (data: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string; expenseId?: string }) => void
   onDeleteDue?: (id: string) => void
   onDeleteTreasuryTx?: (id: string) => void
 }

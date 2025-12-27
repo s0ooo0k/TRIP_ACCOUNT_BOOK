@@ -32,6 +32,7 @@ export function MainDashboard({
   onRestoreDue,
   onRestoreTreasury,
   onAddTreasury,
+  onSettleExpense,
   onAddDue,
   onUpsertAccount,
   onUpsertTripTreasuryAccount,
@@ -40,6 +41,17 @@ export function MainDashboard({
   const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
   const [activeSection, setActiveSection] = useState<'summary' | 'participants' | 'expenses' | 'settlement' | 'dues' | 'deleted'>('expenses')
   const isTreasurer = participants.find((p: any) => p.id === user.id)?.is_treasurer
+
+  const handleSettleExpense = async (expense: any) => {
+    if (!onSettleExpense) return
+    if (expense?.is_settled) {
+      alert('이미 정산 완료된 내역입니다.')
+      return
+    }
+    const ok = window.confirm('이 결제 내역을 정산 완료 처리하고 모임통장 입출금 기록에 추가할까요?')
+    if (!ok) return
+    await onSettleExpense(expense)
+  }
 
   const sections = [
     { id: 'expenses', label: '지출' },
@@ -160,8 +172,13 @@ export function MainDashboard({
               <ExpenseList
                 expenses={expenses}
                 participants={participants}
+                accounts={accounts}
+                currentParticipantId={user.id}
+                isTreasurer={!!isTreasurer}
                 onDelete={onDeleteExpense}
                 showDelete={!!isTreasurer}
+                onSettle={handleSettleExpense}
+                showSettle={!!isTreasurer}
               />
             </div>
           )}
@@ -177,8 +194,11 @@ export function MainDashboard({
               <Treasury
                 participants={participants}
                 treasury={treasury}
+                expenses={expenses}
+                accounts={accounts}
                 isTreasurer={!!isTreasurer}
                 onAdd={onAddTreasury}
+                onSettleExpense={handleSettleExpense}
                 onDeleteTx={onDeleteTreasuryTx}
               />
             </div>

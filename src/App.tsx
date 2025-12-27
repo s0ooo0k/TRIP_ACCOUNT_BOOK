@@ -595,7 +595,7 @@ function App() {
     await loadExpenses()
   }
 
-  async function handleAddTreasury(tx: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string }) {
+  async function handleAddTreasury(tx: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string; expenseId?: string }) {
     if (!tripId || !user) return
     const current = participants.find(p => p.id === user.id)
     if (!current?.is_treasurer) {
@@ -611,7 +611,8 @@ function App() {
         counterparty_id: tx.counterpartyId,
         amount: tx.amount,
         memo: tx.memo,
-        due_id: tx.dueId || null
+        due_id: tx.dueId || null,
+        expense_id: tx.expenseId || null
       })
     if (error) {
       console.error('정산 기록 추가 오류:', error)
@@ -619,6 +620,106 @@ function App() {
       return
     }
     await loadTreasury()
+  }
+
+  async function handleSettleExpense(expense: Expense) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 정산할 수 있습니다.')
+      return
+    }
+    if (expense.is_settled) {
+      alert('이미 정산 완료된 내역입니다.')
+      return
+    }
+    const { data: existingTxs, error: existingError } = await supabase
+      .from('treasury_transactions')
+      .select('id')
+      .eq('expense_id', expense.id)
+      .eq('is_deleted', false)
+      .limit(1)
+    if (existingError) {
+      console.error('정산 연동 조회 오류:', existingError)
+      alert('정산 내역을 확인할 수 없습니다.')
+      return
+    }
+    if (existingTxs && existingTxs.length > 0) {
+      alert('이미 일부 정산/입출금 기록이 있습니다. 기존 내역을 모두 삭제한 뒤 다시 진행해주세요.')
+      return
+    }
+    const participantIds = Array.isArray(expense.participant_ids) ? expense.participant_ids : []
+    if (participantIds.length === 0) {
+      alert('참여자가 없어 정산할 수 없습니다.')
+      return
+    }
+    const share = expense.amount / participantIds.length
+    const participantSet = new Set(participantIds)
+    const impactedIds = new Set<string>(participantIds)
+    if (expense.payer_id) impactedIds.add(expense.payer_id)
+
+    const memoBase = expense.description?.trim() ? expense.description.trim() : '지출'
+    const memo = `정산 완료 - ${memoBase}`
+
+    const txRows: Array<{
+      trip_id: string
+      treasurer_id: string | null
+      direction: 'send'
+      counterparty_id: string | null
+      amount: number
+      memo: string
+      due_id: string | null
+      expense_id: string | null
+    }> = []
+
+    impactedIds.forEach((pid) => {
+      let balance = 0
+      if (pid === expense.payer_id) balance += expense.amount
+      if (participantSet.has(pid)) balance -= share
+      const rounded = Math.round(balance)
+      if (rounded <= 0) return
+      txRows.push({
+        trip_id: tripId,
+        treasurer_id: current.id,
+        direction: 'send',
+        counterparty_id: pid,
+        amount: rounded,
+        memo,
+        due_id: null,
+        expense_id: expense.id
+      })
+    })
+
+    if (txRows.length === 0) {
+      alert('추가할 정산 내역이 없습니다.')
+      return
+    }
+
+    const { error: insertError } = await supabase
+      .from('treasury_transactions')
+      .insert(txRows)
+    if (insertError) {
+      console.error('정산 완료 기록 추가 오류:', insertError)
+      alert('정산 완료 기록 추가에 실패했습니다.')
+      return
+    }
+
+    const { error: updateError } = await supabase
+      .from('expenses')
+      .update({
+        is_settled: true,
+        settled_at: new Date().toISOString(),
+        settled_by: current.id
+      })
+      .eq('id', expense.id)
+    if (updateError) {
+      console.error('정산 완료 상태 업데이트 오류:', updateError)
+      alert('정산 완료 표시 업데이트에 실패했습니다.')
+      return
+    }
+
+    await loadTreasury()
+    await loadExpenses()
   }
 
   async function handleAddDue(due: { title: string; dueDate: string | null; target: number }) {
@@ -753,6 +854,8 @@ function App() {
     }
     const ok = window.confirm('이 정산/입출금 기록을 삭제할까요? 삭제된 내역 탭에서 복구할 수 있습니다.')
     if (!ok) return
+    const targetTx = treasury.find(t => t.id === id)
+    const expenseId = targetTx?.expense_id || null
     const { error } = await supabase
       .from('treasury_transactions')
       .update({
@@ -766,8 +869,18 @@ function App() {
       alert('정산 기록 삭제에 실패했습니다.')
       return
     }
+    if (expenseId) {
+      const { error: updateExpenseError } = await supabase
+        .from('expenses')
+        .update({ is_settled: false, settled_at: null, settled_by: null })
+        .eq('id', expenseId)
+      if (updateExpenseError) {
+        console.error('정산 완료 상태 해제 오류:', updateExpenseError)
+      }
+    }
     await loadTreasury()
     await loadDeletedTreasury()
+    await loadExpenses()
   }
 
   async function handleRestoreTreasuryTx(id: string) {
@@ -779,6 +892,8 @@ function App() {
     }
     const ok = window.confirm('이 정산/입출금 기록을 복구할까요?')
     if (!ok) return
+    const targetTx = deletedTreasury.find(t => t.id === id)
+    const expenseId = targetTx?.expense_id || null
     const { error } = await supabase
       .from('treasury_transactions')
       .update({ is_deleted: false, deleted_at: null, deleted_by: null })
@@ -788,8 +903,28 @@ function App() {
       alert('정산 기록 복구에 실패했습니다.')
       return
     }
+    if (expenseId) {
+      const { data: deletedRemaining, error: deletedRemainingError } = await supabase
+        .from('treasury_transactions')
+        .select('id')
+        .eq('expense_id', expenseId)
+        .eq('is_deleted', true)
+        .limit(1)
+      if (deletedRemainingError) {
+        console.error('정산 연동 조회 오류:', deletedRemainingError)
+      } else if (!deletedRemaining || deletedRemaining.length === 0) {
+        const { error: updateExpenseError } = await supabase
+          .from('expenses')
+          .update({ is_settled: true, settled_at: new Date().toISOString(), settled_by: current?.id || null })
+          .eq('id', expenseId)
+        if (updateExpenseError) {
+          console.error('정산 완료 상태 복구 오류:', updateExpenseError)
+        }
+      }
+    }
     await loadTreasury()
     await loadDeletedTreasury()
+    await loadExpenses()
   }
 
   if (loading) {
@@ -847,6 +982,7 @@ function App() {
               onRestoreDue={handleRestoreDue}
               onRestoreTreasury={handleRestoreTreasuryTx}
               onAddTreasury={handleAddTreasury}
+              onSettleExpense={handleSettleExpense}
               onAddDue={handleAddDue}
               onUpsertAccount={handleUpsertAccount}
               onUpsertTripTreasuryAccount={handleUpsertTripTreasuryAccount}
