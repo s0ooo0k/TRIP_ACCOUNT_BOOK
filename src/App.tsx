@@ -648,15 +648,10 @@ function App() {
       alert('이미 일부 정산/입출금 기록이 있습니다. 기존 내역을 모두 삭제한 뒤 다시 진행해주세요.')
       return
     }
-    const participantIds = Array.isArray(expense.participant_ids) ? expense.participant_ids : []
-    if (participantIds.length === 0) {
-      alert('참여자가 없어 정산할 수 없습니다.')
+    if (!expense.payer_id) {
+      alert('결제자가 없어 정산할 수 없습니다.')
       return
     }
-    const share = expense.amount / participantIds.length
-    const participantSet = new Set(participantIds)
-    const impactedIds = new Set<string>(participantIds)
-    if (expense.payer_id) impactedIds.add(expense.payer_id)
 
     const memoBase = expense.description?.trim() ? expense.description.trim() : '지출'
     const memo = `정산 완료 - ${memoBase}`
@@ -672,22 +667,15 @@ function App() {
       expense_id: string | null
     }> = []
 
-    impactedIds.forEach((pid) => {
-      let balance = 0
-      if (pid === expense.payer_id) balance += expense.amount
-      if (participantSet.has(pid)) balance -= share
-      const rounded = Math.round(balance)
-      if (rounded <= 0) return
-      txRows.push({
-        trip_id: tripId,
-        treasurer_id: current.id,
-        direction: 'send',
-        counterparty_id: pid,
-        amount: rounded,
-        memo,
-        due_id: null,
-        expense_id: expense.id
-      })
+    txRows.push({
+      trip_id: tripId,
+      treasurer_id: current.id,
+      direction: 'send',
+      counterparty_id: expense.payer_id,
+      amount: expense.amount,
+      memo,
+      due_id: null,
+      expense_id: expense.id
     })
 
     if (txRows.length === 0) {

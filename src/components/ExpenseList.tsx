@@ -52,25 +52,14 @@ export function ExpenseList({
   }
 
   const getSendTargets = (expense: Expense) => {
-    if (!expense.participant_ids || expense.participant_ids.length === 0) return []
-    const share = expense.amount / expense.participant_ids.length
-    const participantSet = new Set(expense.participant_ids)
-    const impactedIds = new Set<string>(expense.participant_ids)
-    if (expense.payer_id) impactedIds.add(expense.payer_id)
-    const result: Array<{ id: string; name: string; amount: number }> = []
-    impactedIds.forEach((pid) => {
-      let balance = 0
-      if (pid === expense.payer_id) balance += expense.amount
-      if (participantSet.has(pid)) balance -= share
-      const rounded = Math.round(balance)
-      if (rounded <= 0) return
-      result.push({
-        id: pid,
-        name: participantMap.get(pid) || '알 수 없음',
-        amount: rounded
-      })
-    })
-    return result
+    if (!expense.payer_id) return []
+    return [
+      {
+        id: expense.payer_id,
+        name: participantMap.get(expense.payer_id) || '알 수 없음',
+        amount: expense.amount
+      }
+    ]
   }
 
   if (expenses.length === 0) {

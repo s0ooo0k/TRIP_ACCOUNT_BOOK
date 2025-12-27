@@ -65,32 +65,25 @@ export function Treasury({ participants, treasury, expenses = [], accounts = [],
 
   const settlementReceivers = useMemo(() => {
     if (!selectedExpense) return []
-    if (!selectedExpense.participant_ids || selectedExpense.participant_ids.length === 0) return []
-    const share = selectedExpense.amount / selectedExpense.participant_ids.length
-    const participantSet = new Set(selectedExpense.participant_ids)
-    const impactedIds = new Set<string>(selectedExpense.participant_ids)
-    if (selectedExpense.payer_id) impactedIds.add(selectedExpense.payer_id)
-    const result: Array<{ id: string; name: string; amount: number; accountLabel: string }> = []
-    impactedIds.forEach((pid) => {
-      let balance = 0
-      if (pid === selectedExpense.payer_id) balance += selectedExpense.amount
-      if (participantSet.has(pid)) balance -= share
-      const rounded = Math.round(balance)
-      if (rounded <= 0) return
-      const name = participants.find(p => p.id === pid)?.name || '알 수 없음'
-      const account = accountMap.get(pid)
-      const accountLabel = account
-        ? `${account.bank_name} ${account.account_number}${account.account_holder ? ` · ${account.account_holder}` : ''}`
-        : '등록하지 않음'
-      result.push({ id: pid, name, amount: rounded, accountLabel })
-    })
-    return result
+    if (!selectedExpense.payer_id) return []
+    const payerId = selectedExpense.payer_id
+    const name = participants.find(p => p.id === payerId)?.name || '알 수 없음'
+    const account = accountMap.get(payerId)
+    const accountLabel = account
+      ? `${account.bank_name} ${account.account_number}${account.account_holder ? ` · ${account.account_holder}` : ''}`
+      : '등록하지 않음'
+    return [{
+      id: payerId,
+      name,
+      amount: selectedExpense.amount,
+      accountLabel
+    }]
   }, [participants, selectedExpense, accountMap])
 
   const handleAutoSettle = async () => {
     if (!selectedExpense || !onSettleExpense) return
-    if (!selectedExpense.participant_ids || selectedExpense.participant_ids.length === 0) {
-      alert('참여자가 없어 정산할 수 없습니다.')
+    if (!selectedExpense.payer_id) {
+      alert('결제자가 없어 정산할 수 없습니다.')
       return
     }
     await onSettleExpense(selectedExpense)
@@ -128,7 +121,7 @@ export function Treasury({ participants, treasury, expenses = [], accounts = [],
                   <div className="rounded-md bg-white/80 border border-orange-100 p-2 text-xs text-gray-700 space-y-1">
                     <div className="font-semibold text-gray-800">보내기 예정</div>
                     {settlementReceivers.length === 0 ? (
-                      <div>보낼 사람이 없습니다.</div>
+                      <div>결제자가 없어 보낼 사람이 없습니다.</div>
                     ) : (
                       settlementReceivers.map((r) => (
                         <div key={r.id} className="flex items-center justify-between gap-2">
