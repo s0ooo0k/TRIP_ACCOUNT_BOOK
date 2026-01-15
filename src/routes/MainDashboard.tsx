@@ -40,6 +40,10 @@ export function MainDashboard({
   onLogout,
 }: any) {
   const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
+  const treasuryBalance = treasury.reduce(
+    (sum: number, tx: any) => sum + (tx.direction === 'receive' ? tx.amount || 0 : -(tx.amount || 0)),
+    0
+  )
   const [activeSection, setActiveSection] = useState<'summary' | 'participants' | 'expenses' | 'settlement' | 'dues' | 'deleted'>('expenses')
   const isTreasurer = participants.find((p: any) => p.id === user.id)?.is_treasurer
 
@@ -131,7 +135,7 @@ export function MainDashboard({
 
           {/* Summary cards */}
           {activeSection === 'summary' && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-6">
               <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
                 <p className="text-xs uppercase text-gray-500">참여자</p>
                 <p className="text-2xl font-bold text-gray-900">{participants.length}</p>
@@ -143,6 +147,10 @@ export function MainDashboard({
               <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
                 <p className="text-xs uppercase text-gray-500">정산 건수</p>
                 <p className="text-2xl font-bold text-gray-900">{settlements.length}</p>
+              </div>
+              <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
+                <p className="text-xs uppercase text-gray-500">모임 통장 잔액</p>
+                <p className="text-2xl font-bold text-gray-900">{treasuryBalance.toLocaleString()}원</p>
               </div>
             </div>
           )}
