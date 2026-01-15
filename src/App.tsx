@@ -517,11 +517,6 @@ function App() {
 
   async function handleAddExpense(expenseData: { payerId: string; amount: number; description: string; participantIds: string[]; images?: ExpenseImageInput[] }) {
     if (!tripId) return
-    const current = participants.find(p => p.id === user?.id)
-    if (!current?.is_treasurer) {
-      alert('총무 권한이 있는 사용자만 지출을 추가할 수 있습니다.')
-      return
-    }
     const { data: newExpense, error: expenseError } = await supabase
       .from('expenses')
       .insert({
@@ -736,8 +731,10 @@ function App() {
   async function handleDeleteExpense(id: string) {
     if (!tripId || !user) return
     const current = participants.find(p => p.id === user.id)
-    if (!current?.is_treasurer) {
-      alert('총무만 삭제할 수 있습니다.')
+    const target = expenses.find(expense => expense.id === id)
+    const isCreator = target?.created_by && target.created_by === user.id
+    if (!current?.is_treasurer && !isCreator) {
+      alert('총무 또는 등록자만 삭제할 수 있습니다.')
       return
     }
     const ok = window.confirm('이 지출을 삭제할까요? 삭제된 내역 탭에서 복구할 수 있습니다.')

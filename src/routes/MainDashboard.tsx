@@ -176,7 +176,7 @@ export function MainDashboard({
                 currentParticipantId={user.id}
                 isTreasurer={!!isTreasurer}
                 onDelete={onDeleteExpense}
-                showDelete={!!isTreasurer}
+                showDelete
                 onSettle={handleSettleExpense}
                 showSettle={!!isTreasurer}
               />
