@@ -22,6 +22,7 @@ export function MainDashboard({
   accounts,
   tripTreasuryAccount,
   onAddExpense,
+  onUpdateExpense,
   onDeleteExpense,
   onDeleteDue,
   onDeleteTreasuryTx,
@@ -175,6 +176,7 @@ export function MainDashboard({
                 accounts={accounts}
                 currentParticipantId={user.id}
                 isTreasurer={!!isTreasurer}
+                onUpdate={onUpdateExpense}
                 onDelete={onDeleteExpense}
                 showDelete
                 onSettle={handleSettleExpense}

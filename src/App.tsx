@@ -590,6 +590,65 @@ function App() {
     await loadExpenses()
   }
 
+  async function handleUpdateExpense(expenseId: string, expenseData: { payerId: string; amount: number; description: string; participantIds: string[] }) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    const target = expenses.find(expense => expense.id === expenseId)
+    const isCreator = !!target?.created_by && target.created_by === user.id
+    if (!current?.is_treasurer && !isCreator) {
+      alert('총무 또는 등록자만 수정할 수 있습니다.')
+      return
+    }
+
+    const { error: updateError } = await supabase
+      .from('expenses')
+      .update({
+        payer_id: expenseData.payerId,
+        amount: expenseData.amount,
+        description: expenseData.description || '기타'
+      })
+      .eq('id', expenseId)
+    if (updateError) {
+      console.error('결제 수정 오류:', updateError)
+      alert('결제 수정에 실패했습니다.')
+      return
+    }
+
+    const previousParticipantIds = target?.participant_ids || []
+    const { error: deleteError } = await supabase
+      .from('expense_participants')
+      .delete()
+      .eq('expense_id', expenseId)
+    if (deleteError) {
+      console.error('참여자 업데이트 오류:', deleteError)
+      alert('참여자 업데이트에 실패했습니다.')
+      return
+    }
+
+    const participantMappings = expenseData.participantIds.map(participantId => ({
+      expense_id: expenseId,
+      participant_id: participantId
+    })) as Partial<ExpenseParticipantRow>[]
+    const { error: insertError } = await supabase
+      .from('expense_participants')
+      .insert(participantMappings)
+    if (insertError) {
+      console.error('참여자 업데이트 오류:', insertError)
+      if (previousParticipantIds.length > 0) {
+        await supabase.from('expense_participants').insert(
+          previousParticipantIds.map(participantId => ({
+            expense_id: expenseId,
+            participant_id: participantId
+          })) as Partial<ExpenseParticipantRow>[]
+        )
+      }
+      alert('참여자 업데이트에 실패했습니다.')
+      return
+    }
+
+    await loadExpenses()
+  }
+
   async function handleAddTreasury(tx: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string; expenseId?: string }) {
     if (!tripId || !user) return
     const current = participants.find(p => p.id === user.id)
@@ -957,6 +1016,7 @@ function App() {
               accounts={accounts}
               tripTreasuryAccount={tripTreasuryAccount}
               onAddExpense={handleAddExpense}
+              onUpdateExpense={handleUpdateExpense}
               onDeleteExpense={handleDeleteExpense}
               onDeleteDue={handleDeleteDue}
               onDeleteTreasuryTx={handleDeleteTreasuryTx}

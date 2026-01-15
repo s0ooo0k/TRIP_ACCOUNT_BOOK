@@ -4,7 +4,9 @@ import { formatCurrency } from '../utils/settlement'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
 
 interface Props {
   expenses: Expense[]
@@ -12,6 +14,7 @@ interface Props {
   accounts?: ParticipantAccount[]
   currentParticipantId?: string
   isTreasurer?: boolean
+  onUpdate?: (id: string, data: { payerId: string; amount: number; description: string; participantIds: string[] }) => Promise<void> | void
   onDelete?: (id: string) => void
   showDelete?: boolean
   onSettle?: (expense: Expense) => void
@@ -24,6 +27,7 @@ export function ExpenseList({
   accounts = [],
   currentParticipantId,
   isTreasurer = false,
+  onUpdate,
   onDelete,
   showDelete = false,
   onSettle,
@@ -35,6 +39,13 @@ export function ExpenseList({
   const accountMap = useMemo(() => {
     return new Map(accounts.map(acc => [acc.participant_id, acc]))
   }, [accounts])
+
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editPayerId, setEditPayerId] = useState('')
+  const [editAmount, setEditAmount] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editParticipants, setEditParticipants] = useState<Set<string>>(new Set())
+  const [saving, setSaving] = useState(false)
 
   const getParticipantNames = (participantIds: string[]) => {
     return participantIds.map(id => participantMap.get(id) || '').join(', ')
@@ -60,6 +71,75 @@ export function ExpenseList({
         amount: expense.amount
       }
     ]
+  }
+
+  const canEditExpense = (expense: Expense) => {
+    if (!onUpdate) return false
+    if (isTreasurer) return true
+    if (!currentParticipantId) return false
+    return expense.created_by === currentParticipantId
+  }
+
+  const startEdit = (expense: Expense) => {
+    setEditingId(expense.id)
+    setEditPayerId(expense.payer_id || '')
+    setEditAmount(String(expense.amount ?? ''))
+    setEditDescription(expense.description || '')
+    setEditParticipants(new Set(expense.participant_ids || []))
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setSaving(false)
+  }
+
+  const toggleEditParticipant = (participantId: string) => {
+    setEditParticipants((prev) => {
+      const next = new Set(prev)
+      if (next.has(participantId)) {
+        next.delete(participantId)
+      } else {
+        next.add(participantId)
+      }
+      return next
+    })
+  }
+
+  const toggleAllParticipants = () => {
+    if (editParticipants.size === participants.length) {
+      setEditParticipants(new Set())
+    } else {
+      setEditParticipants(new Set(participants.map(p => p.id)))
+    }
+  }
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!onUpdate || !editingId || saving) return
+
+    if (!editPayerId || !editAmount || editParticipants.size === 0) {
+      alert('모든 항목을 입력해주세요.')
+      return
+    }
+
+    const amountNum = parseInt(editAmount)
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('올바른 금액을 입력해주세요.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await onUpdate(editingId, {
+        payerId: editPayerId,
+        amount: amountNum,
+        description: editDescription || '기타',
+        participantIds: Array.from(editParticipants)
+      })
+      setEditingId(null)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const canDeleteExpense = (expense: Expense) => {
@@ -102,6 +182,8 @@ export function ExpenseList({
       <CardContent className="space-y-2">
         {expenses.map(expense => {
           const canDelete = canDeleteExpense(expense)
+          const canEdit = canEditExpense(expense)
+          const isEditing = editingId === expense.id
           return (
             <div
               key={expense.id}
@@ -166,25 +248,118 @@ export function ExpenseList({
                       ))}
                   </div>
                 )}
+                {isEditing && (
+                  <form
+                    onSubmit={handleEditSubmit}
+                    className="mt-3 space-y-3 rounded-md border border-orange-100 bg-white/80 p-3"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`edit-payer-${expense.id}`}>결제자</Label>
+                        <Select
+                          id={`edit-payer-${expense.id}`}
+                          value={editPayerId}
+                          onChange={(e) => setEditPayerId(e.target.value)}
+                        >
+                          <option value="">선택하세요</option>
+                          {participants.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`edit-amount-${expense.id}`}>금액</Label>
+                        <div className="relative">
+                          <Input
+                            id={`edit-amount-${expense.id}`}
+                            type="number"
+                            value={editAmount}
+                            onChange={(e) => setEditAmount(e.target.value)}
+                            placeholder="0"
+                            className="pr-10"
+                          />
+                          <span className="absolute right-3 top-2.5 text-sm text-gray-500">원</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`edit-desc-${expense.id}`}>항목</Label>
+                      <Input
+                        id={`edit-desc-${expense.id}`}
+                        type="text"
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        placeholder="항목을 입력하세요"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>참여자</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-gray-500"
+                          onClick={toggleAllParticipants}
+                        >
+                          전체 선택
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {participants.map(p => (
+                          <label key={p.id} className="flex items-center gap-2 text-sm text-gray-700">
+                            <Checkbox
+                              checked={editParticipants.has(p.id)}
+                              onChange={() => toggleEditParticipant(p.id)}
+                            />
+                            <span>{p.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button type="submit" size="sm" disabled={saving}>
+                        저장
+                      </Button>
+                      <Button type="button" variant="ghost" size="sm" onClick={cancelEdit} disabled={saving}>
+                        취소
+                      </Button>
+                    </div>
+                  </form>
+                )}
               </div>
 
-              {(showSettle && onSettle && !expense.is_settled) || canDelete ? (
-                <div className="flex items-center gap-2">
-                  {showSettle && onSettle && !expense.is_settled && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-emerald-700 hover:text-emerald-800"
-                      onClick={() => onSettle(expense)}
-                      title="정산 완료"
-                    >
-                      정산 완료
-                    </Button>
-                  )}
-                  {canDelete && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
+            {(showSettle && onSettle && !expense.is_settled) || canEdit || canDelete ? (
+              <div className="flex items-center gap-2">
+                {showSettle && onSettle && !expense.is_settled && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-emerald-700 hover:text-emerald-800"
+                    onClick={() => onSettle(expense)}
+                    title="정산 완료"
+                  >
+                    정산 완료
+                  </Button>
+                )}
+                {canEdit && !isEditing && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-gray-500 hover:text-gray-800"
+                    onClick={() => startEdit(expense)}
+                    title="수정"
+                  >
+                    수정
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
                       className="text-gray-500 hover:text-red-600"
                       onClick={() => onDelete?.(expense.id)}
                       title="삭제"
