@@ -44,6 +44,16 @@ export function MainDashboard({
     (sum: number, tx: any) => sum + (tx.direction === 'receive' ? tx.amount || 0 : -(tx.amount || 0)),
     0
   )
+  const myExpenses = expenses.filter((e: any) => e.payer_id === user.id)
+  const myTotalAmount = myExpenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
+  const myUsageItems = expenses
+    .filter((e: any) => (e.participant_ids || []).includes(user.id))
+    .map((e: any) => {
+      const headcount = e.participant_ids?.length || 0
+      const myShare = headcount > 0 ? e.amount / headcount : 0
+      return { ...e, myShare }
+    })
+  const myUsageTotal = myUsageItems.reduce((sum: number, e: any) => sum + (e.myShare || 0), 0)
   const [activeSection, setActiveSection] = useState<'summary' | 'participants' | 'expenses' | 'settlement' | 'dues' | 'deleted'>('expenses')
   const isTreasurer = participants.find((p: any) => p.id === user.id)?.is_treasurer
 
@@ -135,22 +145,84 @@ export function MainDashboard({
 
           {/* Summary cards */}
           {activeSection === 'summary' && (
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-6">
-              <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
-                <p className="text-xs uppercase text-gray-500">참여자</p>
-                <p className="text-2xl font-bold text-gray-900">{participants.length}</p>
+            <div className="space-y-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
+                  <p className="text-xs uppercase text-gray-500">참여자</p>
+                  <p className="text-2xl font-bold text-gray-900">{participants.length}</p>
+                </div>
+                <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
+                  <p className="text-xs uppercase text-gray-500">총 지출</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalAmount.toLocaleString()}원</p>
+                </div>
+                <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
+                  <p className="text-xs uppercase text-gray-500">정산 건수</p>
+                  <p className="text-2xl font-bold text-gray-900">{settlements.length}</p>
+                </div>
+                <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
+                  <p className="text-xs uppercase text-gray-500">모임 통장 잔액</p>
+                  <p className="text-2xl font-bold text-gray-900">{treasuryBalance.toLocaleString()}원</p>
+                </div>
               </div>
+
               <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
-                <p className="text-xs uppercase text-gray-500">총 지출</p>
-                <p className="text-2xl font-bold text-gray-900">{totalAmount.toLocaleString()}원</p>
-              </div>
-              <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
-                <p className="text-xs uppercase text-gray-500">정산 건수</p>
-                <p className="text-2xl font-bold text-gray-900">{settlements.length}</p>
-              </div>
-              <div className="rounded-xl border border-orange-100 bg-white/90 p-4 shadow-sm">
-                <p className="text-xs uppercase text-gray-500">모임 통장 잔액</p>
-                <p className="text-2xl font-bold text-gray-900">{treasuryBalance.toLocaleString()}원</p>
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs uppercase text-gray-500">내 개인 요약</p>
+                  <p className="text-lg font-semibold text-gray-900">
+                    {tripName ? `${tripName} 지출 기준` : '지출 기준'}
+                  </p>
+                </div>
+
+                <div className="mt-3 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border border-orange-100 bg-white/70 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold text-gray-900">내가 결제한 내역</div>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-500">합계</div>
+                        <div className="text-lg font-bold text-gray-900">{myTotalAmount.toLocaleString()}원</div>
+                      </div>
+                    </div>
+                    {myExpenses.length === 0 ? (
+                      <div className="mt-2 text-sm text-gray-500">아직 내가 결제한 지출이 없습니다.</div>
+                    ) : (
+                      <ul className="mt-2 divide-y divide-orange-100">
+                        {myExpenses.map((expense: any) => (
+                          <li key={expense.id} className="flex items-center justify-between py-2 text-sm">
+                            <span className="text-gray-700">{expense.description || '기타'}</span>
+                            <span className="font-semibold text-gray-900">{(expense.amount || 0).toLocaleString()}원</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  <div className="rounded-lg border border-orange-100 bg-white/70 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold text-gray-900">내가 쓴 내역 (1인당)</div>
+                      <div className="text-right">
+                        <div className="text-xs text-gray-500">합계</div>
+                        <div className="text-lg font-bold text-gray-900">{Math.round(myUsageTotal).toLocaleString()}원</div>
+                      </div>
+                    </div>
+                    {myUsageItems.length === 0 ? (
+                      <div className="mt-2 text-sm text-gray-500">아직 내가 사용한 지출이 없습니다.</div>
+                    ) : (
+                      <ul className="mt-2 divide-y divide-orange-100">
+                        {myUsageItems.map((expense: any) => (
+                          <li key={expense.id} className="flex items-center justify-between py-2 text-sm">
+                            <div className="flex flex-col">
+                              <span className="text-gray-700">{expense.description || '기타'}</span>
+                              <span className="text-xs text-gray-500">
+                                {(expense.amount || 0).toLocaleString()}원 / {(expense.participant_ids?.length || 0)}명
+                              </span>
+                            </div>
+                            <span className="font-semibold text-gray-900">{Math.round(expense.myShare || 0).toLocaleString()}원</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
