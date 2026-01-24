@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Participant, Expense, ParticipantAccount } from '../utils/settlement'
 import { formatCurrency } from '../utils/settlement'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -46,6 +46,32 @@ export function ExpenseList({
   const [editDescription, setEditDescription] = useState('')
   const [editParticipants, setEditParticipants] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!openMenuId) return
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpenMenuId(null)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenMenuId(null)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [openMenuId])
 
   const getParticipantNames = (participantIds: string[]) => {
     return participantIds.map(id => participantMap.get(id) || '').join(', ')
@@ -184,13 +210,15 @@ export function ExpenseList({
           const canDelete = canDeleteExpense(expense)
           const canEdit = canEditExpense(expense)
           const isEditing = editingId === expense.id
+          const hasActions = (showSettle && onSettle && !expense.is_settled) || canEdit || canDelete
+          const isMenuOpen = openMenuId === expense.id
           return (
             <div
               key={expense.id}
-              className="flex items-center justify-between rounded-lg border border-orange-100 bg-orange-50/60 px-4 py-3"
+              className="relative rounded-lg border border-orange-100 bg-orange-50/60 px-4 py-3 sm:flex sm:items-center sm:justify-between"
             >
               <div className="flex-1">
-                <div className="flex items-center gap-2">
+                <div className={`flex items-center gap-2 ${hasActions ? 'pr-10 sm:pr-0' : ''}`}>
                   <span className="font-medium text-gray-900">{expense.description}</span>
                   <span className="text-orange-600 font-semibold">
                     {formatCurrency(expense.amount)}원
@@ -332,40 +360,71 @@ export function ExpenseList({
                 )}
               </div>
 
-            {(showSettle && onSettle && !expense.is_settled) || canEdit || canDelete ? (
-              <div className="flex items-center gap-2">
-                {showSettle && onSettle && !expense.is_settled && (
+              {hasActions ? (
+                <div
+                  ref={isMenuOpen ? menuRef : null}
+                  className="absolute right-2 top-2 flex flex-col items-end"
+                >
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="text-emerald-700 hover:text-emerald-800"
-                    onClick={() => onSettle(expense)}
-                    title="정산 완료"
+                    size="icon"
+                    className="h-8 w-8 text-gray-500 hover:bg-orange-100 hover:text-gray-700"
+                    onClick={() => setOpenMenuId(isMenuOpen ? null : expense.id)}
+                    aria-haspopup="menu"
+                    aria-expanded={isMenuOpen}
+                    title="메뉴"
                   >
-                    정산 완료
-                  </Button>
-                )}
-                {canEdit && !isEditing && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-gray-500 hover:text-gray-800"
-                    onClick={() => startEdit(expense)}
-                    title="수정"
-                  >
-                    수정
-                  </Button>
-                )}
-                {canDelete && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                      className="text-gray-500 hover:text-red-600"
-                      onClick={() => onDelete?.(expense.id)}
-                      title="삭제"
+                    <span className="sr-only">지출 메뉴</span>
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="currentColor"
                     >
-                      삭제
-                    </Button>
+                      <circle cx="12" cy="5" r="2" />
+                      <circle cx="12" cy="12" r="2" />
+                      <circle cx="12" cy="19" r="2" />
+                    </svg>
+                  </Button>
+                  {isMenuOpen && (
+                    <div className="mt-1 w-32 rounded-md border border-orange-100 bg-white py-1 text-sm shadow-lg z-10">
+                      {showSettle && onSettle && !expense.is_settled && (
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-emerald-700 hover:bg-orange-50"
+                          onClick={() => {
+                            setOpenMenuId(null)
+                            onSettle(expense)
+                          }}
+                        >
+                          정산 완료
+                        </button>
+                      )}
+                      {canEdit && !isEditing && (
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-gray-700 hover:bg-orange-50"
+                          onClick={() => {
+                            setOpenMenuId(null)
+                            startEdit(expense)
+                          }}
+                        >
+                          수정
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-red-600 hover:bg-orange-50"
+                          onClick={() => {
+                            setOpenMenuId(null)
+                            onDelete?.(expense.id)
+                          }}
+                        >
+                          삭제
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               ) : null}
