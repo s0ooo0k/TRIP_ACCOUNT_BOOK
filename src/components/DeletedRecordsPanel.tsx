@@ -54,6 +54,11 @@ export function DeletedRecordsPanel({
                       삭제일: {new Date(expense.deleted_at).toLocaleString()}
                     </div>
                   )}
+                  {expense.deleted_by && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      삭제자: {participantMap.get(expense.deleted_by) || '알 수 없음'}
+                    </div>
+                  )}
                 </div>
                 {canRestore && (
                   <Button variant="outline" size="sm" onClick={() => onRestoreExpense(expense.id)}>
@@ -80,6 +85,9 @@ export function DeletedRecordsPanel({
                   {d.title} · 인당 {formatCurrency(d.target_amount)}원
                   {d.deleted_at && (
                     <span className="text-xs text-gray-500"> · 삭제일: {new Date(d.deleted_at).toLocaleDateString()}</span>
+                  )}
+                  {d.deleted_by && (
+                    <span className="text-xs text-gray-500"> · 삭제자: {participantMap.get(d.deleted_by) || '알 수 없음'}</span>
                   )}
                 </div>
                 {canRestore && (
@@ -110,6 +118,9 @@ export function DeletedRecordsPanel({
                   {tx.memo && <div className="text-xs text-gray-500">{tx.memo}</div>}
                   {tx.deleted_at && (
                     <div className="text-xs text-gray-500">삭제일: {new Date(tx.deleted_at).toLocaleString()}</div>
+                  )}
+                  {tx.deleted_by && (
+                    <div className="text-xs text-gray-500">삭제자: {participantMap.get(tx.deleted_by) || '알 수 없음'}</div>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
