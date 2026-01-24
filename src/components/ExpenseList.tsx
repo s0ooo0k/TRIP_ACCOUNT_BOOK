@@ -396,11 +396,14 @@ export function ExpenseList({
                         <div className="relative">
                           <Input
                             id={`edit-amount-${expense.id}`}
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             value={editAmount}
-                            onChange={(e) => setEditAmount(e.target.value)}
+                            onChange={(e) => setEditAmount(e.target.value.replace(/\D/g, ''))}
                             placeholder="0"
                             className="pr-10"
+                            autoComplete="off"
                           />
                           <span className="absolute right-3 top-2.5 text-sm text-gray-500">원</span>
                         </div>
