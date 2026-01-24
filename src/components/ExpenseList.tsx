@@ -539,7 +539,18 @@ export function ExpenseList({
 
               {isHistoryOpen && (
                 <div className="mt-3 w-full rounded-md border border-orange-100 bg-white/80 p-3 text-xs text-gray-700">
-                  <div className="text-xs font-semibold text-gray-800 mb-2">수정 이력</div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs font-semibold text-gray-800">수정 이력</div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-gray-500 hover:text-gray-700"
+                      onClick={() => setOpenHistoryId(null)}
+                    >
+                      닫기
+                    </Button>
+                  </div>
                   {isHistoryLoading ? (
                     <div className="text-xs text-gray-500">불러오는 중...</div>
                   ) : logs && logs.length > 0 ? (
