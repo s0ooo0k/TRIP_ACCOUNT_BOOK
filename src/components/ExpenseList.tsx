@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { Participant, Expense, ParticipantAccount } from '../utils/settlement'
+import type { Participant, Expense, ParticipantAccount, ChangeLogEntry } from '../utils/settlement'
 import { formatCurrency } from '../utils/settlement'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,8 @@ interface Props {
   showDelete?: boolean
   onSettle?: (expense: Expense) => void
   showSettle?: boolean
+  changeLogs?: Record<string, ChangeLogEntry[]>
+  onLoadChangeLogs?: (expenseId: string) => void
 }
 
 export function ExpenseList({
@@ -31,7 +33,9 @@ export function ExpenseList({
   onDelete,
   showDelete = false,
   onSettle,
-  showSettle = false
+  showSettle = false,
+  changeLogs,
+  onLoadChangeLogs
 }: Props) {
   const participantMap = new Map(participants.map(p => [p.id, p.name]))
   const [showAccounts, setShowAccounts] = useState(false)
@@ -48,6 +52,8 @@ export function ExpenseList({
   const [saving, setSaving] = useState(false)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const [openHistoryId, setOpenHistoryId] = useState<string | null>(null)
+  const [loadingHistoryIds, setLoadingHistoryIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!openMenuId) return
@@ -73,6 +79,18 @@ export function ExpenseList({
     }
   }, [openMenuId])
 
+  useEffect(() => {
+    if (!openHistoryId || !changeLogs) return
+    if (Object.prototype.hasOwnProperty.call(changeLogs, openHistoryId)) {
+      setLoadingHistoryIds(prev => {
+        if (!prev.has(openHistoryId)) return prev
+        const next = new Set(prev)
+        next.delete(openHistoryId)
+        return next
+      })
+    }
+  }, [changeLogs, openHistoryId])
+
   const getParticipantNames = (participantIds: string[]) => {
     return participantIds.map(id => participantMap.get(id) || '').join(', ')
   }
@@ -97,6 +115,81 @@ export function ExpenseList({
         amount: expense.amount
       }
     ]
+  }
+
+  const toggleHistory = (expenseId: string) => {
+    if (openHistoryId === expenseId) {
+      setOpenHistoryId(null)
+      return
+    }
+    setOpenHistoryId(expenseId)
+    if (!changeLogs || !Object.prototype.hasOwnProperty.call(changeLogs, expenseId)) {
+      setLoadingHistoryIds(prev => {
+        const next = new Set(prev)
+        next.add(expenseId)
+        return next
+      })
+      onLoadChangeLogs?.(expenseId)
+    }
+  }
+
+  const formatParticipantNames = (ids?: string[]) => {
+    if (!ids || ids.length === 0) return '-'
+    return ids.map(id => participantMap.get(id) || '알 수 없음').join(', ')
+  }
+
+  const formatChangeSummary = (log: ChangeLogEntry) => {
+    const before = (log.before || {}) as Record<string, any>
+    const after = (log.after || {}) as Record<string, any>
+    const items: string[] = []
+
+    if (log.action === 'participants_update') {
+      const beforeIds = before.participant_ids as string[] | undefined
+      const afterIds = after.participant_ids as string[] | undefined
+      items.push(`참여자: ${formatParticipantNames(beforeIds)} → ${formatParticipantNames(afterIds)}`)
+      return items
+    }
+    if (log.action === 'delete') {
+      items.push('삭제 처리됨')
+      return items
+    }
+    if (log.action === 'restore') {
+      items.push('복구 처리됨')
+      return items
+    }
+
+    if (before.description !== undefined && after.description !== undefined && before.description !== after.description) {
+      items.push(`항목: ${before.description || '-'} → ${after.description || '-'}`)
+    }
+    if (before.amount !== undefined && after.amount !== undefined && before.amount !== after.amount) {
+      items.push(`금액: ${formatCurrency(Number(before.amount || 0))}원 → ${formatCurrency(Number(after.amount || 0))}원`)
+    }
+    if (before.payer_id !== undefined && after.payer_id !== undefined && before.payer_id !== after.payer_id) {
+      items.push(`결제자: ${participantMap.get(before.payer_id) || '알 수 없음'} → ${participantMap.get(after.payer_id) || '알 수 없음'}`)
+    }
+    if (before.participant_ids && after.participant_ids && JSON.stringify(before.participant_ids) !== JSON.stringify(after.participant_ids)) {
+      items.push(`참여자: ${formatParticipantNames(before.participant_ids)} → ${formatParticipantNames(after.participant_ids)}`)
+    }
+    if (before.is_settled !== undefined && after.is_settled !== undefined && before.is_settled !== after.is_settled) {
+      items.push(`정산: ${before.is_settled ? '완료' : '미완료'} → ${after.is_settled ? '완료' : '미완료'}`)
+    }
+    if (items.length === 0) {
+      items.push('변경 항목 없음')
+    }
+    return items
+  }
+
+  const getActionLabel = (action: string) => {
+    switch (action) {
+      case 'delete':
+        return '삭제'
+      case 'restore':
+        return '복구'
+      case 'participants_update':
+        return '참여자 변경'
+      default:
+        return '수정'
+    }
   }
 
   const canEditExpense = (expense: Expense) => {
@@ -210,8 +303,11 @@ export function ExpenseList({
           const canDelete = canDeleteExpense(expense)
           const canEdit = canEditExpense(expense)
           const isEditing = editingId === expense.id
-          const hasActions = (showSettle && onSettle && !expense.is_settled) || canEdit || canDelete
+          const hasActions = (showSettle && onSettle && !expense.is_settled) || canEdit || canDelete || !!onLoadChangeLogs
           const isMenuOpen = openMenuId === expense.id
+          const isHistoryOpen = openHistoryId === expense.id
+          const isHistoryLoading = loadingHistoryIds.has(expense.id)
+          const logs = changeLogs?.[expense.id]
           return (
             <div
               key={expense.id}
@@ -424,10 +520,54 @@ export function ExpenseList({
                           삭제
                         </button>
                       )}
+                      {onLoadChangeLogs && (
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-gray-700 hover:bg-orange-50"
+                          onClick={() => {
+                            setOpenMenuId(null)
+                            toggleHistory(expense.id)
+                          }}
+                        >
+                          수정 이력
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               ) : null}
+
+              {isHistoryOpen && (
+                <div className="mt-3 w-full rounded-md border border-orange-100 bg-white/80 p-3 text-xs text-gray-700">
+                  <div className="text-xs font-semibold text-gray-800 mb-2">수정 이력</div>
+                  {isHistoryLoading ? (
+                    <div className="text-xs text-gray-500">불러오는 중...</div>
+                  ) : logs && logs.length > 0 ? (
+                    <div className="space-y-2">
+                      {logs.map((log) => {
+                        const actor = log.changed_by ? participantMap.get(log.changed_by) || '알 수 없음' : '알 수 없음'
+                        return (
+                          <div key={log.id} className="rounded-md border border-orange-50 bg-orange-50/40 p-2">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
+                              <span className="font-semibold text-gray-700">{getActionLabel(log.action)}</span>
+                              <span>{new Date(log.changed_at).toLocaleString()}</span>
+                              <span>·</span>
+                              <span>{actor}</span>
+                            </div>
+                            <div className="mt-1 space-y-1 text-gray-700">
+                              {formatChangeSummary(log).map((line, idx) => (
+                                <div key={`${log.id}-line-${idx}`}>{line}</div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-500">이력이 없습니다.</div>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}

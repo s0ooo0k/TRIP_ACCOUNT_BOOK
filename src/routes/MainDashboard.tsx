@@ -38,6 +38,8 @@ export function MainDashboard({
   onUpsertAccount,
   onUpsertTripTreasuryAccount,
   onLogout,
+  expenseChangeLogs,
+  onLoadExpenseChangeLogs,
 }: any) {
   const totalAmount = expenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0)
   const treasuryBalance = treasury.reduce(
@@ -261,6 +263,8 @@ export function MainDashboard({
                 showDelete
                 onSettle={handleSettleExpense}
                 showSettle={!!isTreasurer}
+                changeLogs={expenseChangeLogs}
+                onLoadChangeLogs={onLoadExpenseChangeLogs}
               />
             </div>
           )}

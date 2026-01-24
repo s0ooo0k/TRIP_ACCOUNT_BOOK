@@ -6,7 +6,7 @@ import { Login } from './components/Login'
 import { AdminPage } from './pages/AdminPage'
 import { MainDashboard } from './routes/MainDashboard'
 import { calculateSettlements } from './utils/settlement'
-import type { Expense, Participant, TreasuryTx, DuesGoal, ParticipantAccount, TripTreasuryAccount, ExpenseImageInput } from './utils/settlement'
+import type { Expense, Participant, TreasuryTx, DuesGoal, ParticipantAccount, TripTreasuryAccount, ExpenseImageInput, ChangeLogEntry } from './utils/settlement'
 import type { Database } from './lib/database.types'
 
 function App() {
@@ -23,6 +23,7 @@ function App() {
   const [deletedExpenses, setDeletedExpenses] = useState<Expense[]>([])
   const [deletedDues, setDeletedDues] = useState<DuesGoal[]>([])
   const [deletedTreasury, setDeletedTreasury] = useState<TreasuryTx[]>([])
+  const [expenseChangeLogs, setExpenseChangeLogs] = useState<Record<string, ChangeLogEntry[]>>({})
   const [loading, setLoading] = useState(true)
 
   const settlements = calculateSettlements(participants, expenses)
@@ -30,6 +31,10 @@ function App() {
   useEffect(() => {
     restoreSession()
   }, [])
+
+  useEffect(() => {
+    setExpenseChangeLogs({})
+  }, [tripId])
 
   // realtime subscriptions
   useEffect(() => {
@@ -261,6 +266,21 @@ function App() {
     )
 
     setExpenses(expensesWithParticipants)
+  }
+
+  async function loadExpenseChangeLogs(expenseId: string) {
+    if (!tripId) return
+    const { data, error } = await supabase
+      .from('change_logs')
+      .select('*')
+      .eq('entity_type', 'expenses')
+      .eq('entity_id', expenseId)
+      .order('changed_at', { ascending: false })
+    if (error) {
+      console.error('지출 변경 이력 로드 오류:', error)
+      return
+    }
+    setExpenseChangeLogs(prev => ({ ...prev, [expenseId]: (data || []) as ChangeLogEntry[] }))
   }
 
   async function loadDeletedExpenses(id?: string) {
@@ -615,35 +635,43 @@ function App() {
     }
 
     const previousParticipantIds = target?.participant_ids || []
-    const { error: deleteError } = await supabase
-      .from('expense_participants')
-      .delete()
-      .eq('expense_id', expenseId)
-    if (deleteError) {
-      console.error('참여자 업데이트 오류:', deleteError)
-      alert('참여자 업데이트에 실패했습니다.')
-      return
-    }
+    const normalize = (ids: string[]) => Array.from(new Set(ids)).sort()
+    const prevList = normalize(previousParticipantIds)
+    const nextList = normalize(expenseData.participantIds)
+    const participantsChanged =
+      prevList.length !== nextList.length || prevList.some((id, idx) => id !== nextList[idx])
 
-    const participantMappings = expenseData.participantIds.map(participantId => ({
-      expense_id: expenseId,
-      participant_id: participantId
-    })) as Partial<ExpenseParticipantRow>[]
-    const { error: insertError } = await supabase
-      .from('expense_participants')
-      .insert(participantMappings)
-    if (insertError) {
-      console.error('참여자 업데이트 오류:', insertError)
-      if (previousParticipantIds.length > 0) {
-        await supabase.from('expense_participants').insert(
-          previousParticipantIds.map(participantId => ({
-            expense_id: expenseId,
-            participant_id: participantId
-          })) as Partial<ExpenseParticipantRow>[]
-        )
+    if (participantsChanged) {
+      const { error: deleteError } = await supabase
+        .from('expense_participants')
+        .delete()
+        .eq('expense_id', expenseId)
+      if (deleteError) {
+        console.error('참여자 업데이트 오류:', deleteError)
+        alert('참여자 업데이트에 실패했습니다.')
+        return
       }
-      alert('참여자 업데이트에 실패했습니다.')
-      return
+
+      const participantMappings = expenseData.participantIds.map(participantId => ({
+        expense_id: expenseId,
+        participant_id: participantId
+      })) as Partial<ExpenseParticipantRow>[]
+      const { error: insertError } = await supabase
+        .from('expense_participants')
+        .insert(participantMappings)
+      if (insertError) {
+        console.error('참여자 업데이트 오류:', insertError)
+        if (previousParticipantIds.length > 0) {
+          await supabase.from('expense_participants').insert(
+            previousParticipantIds.map(participantId => ({
+              expense_id: expenseId,
+              participant_id: participantId
+            })) as Partial<ExpenseParticipantRow>[]
+          )
+        }
+        alert('참여자 업데이트에 실패했습니다.')
+        return
+      }
     }
 
     await loadExpenses()
@@ -1031,6 +1059,8 @@ function App() {
               onAddDue={handleAddDue}
               onUpsertAccount={handleUpsertAccount}
               onUpsertTripTreasuryAccount={handleUpsertTripTreasuryAccount}
+              expenseChangeLogs={expenseChangeLogs}
+              onLoadExpenseChangeLogs={loadExpenseChangeLogs}
               onLogout={handleLogout}
             />
           ) : (

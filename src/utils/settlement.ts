@@ -93,6 +93,18 @@ export interface DuesGoal {
   deleted_by?: string | null
 }
 
+export interface ChangeLogEntry {
+  id: string
+  trip_id: string
+  entity_type: 'expenses' | 'dues' | 'treasury_transactions'
+  entity_id: string
+  action: string
+  changed_at: string
+  changed_by?: string | null
+  before?: Record<string, any> | null
+  after?: Record<string, any> | null
+}
+
 export interface PersonalSettlement {
   personId: string
   personName: string
