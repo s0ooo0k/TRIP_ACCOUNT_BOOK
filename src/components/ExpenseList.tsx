@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Participant, Expense, ParticipantAccount, ChangeLogEntry } from '../utils/settlement'
-import { formatCurrency } from '../utils/settlement'
+import { calculateAutoSettlementSendAmount, formatCurrency } from '../utils/settlement'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -108,11 +108,13 @@ export function ExpenseList({
 
   const getSendTargets = (expense: Expense) => {
     if (!expense.payer_id) return []
+    const sendAmount = calculateAutoSettlementSendAmount(expense)
+    if (sendAmount <= 0) return []
     return [
       {
         id: expense.payer_id,
         name: participantMap.get(expense.payer_id) || '알 수 없음',
-        amount: expense.amount
+        amount: sendAmount
       }
     ]
   }
@@ -337,7 +339,7 @@ export function ExpenseList({
                   <div className="mt-2 rounded-md border border-orange-100 bg-white/80 p-2 text-xs text-gray-700 space-y-1">
                     <div className="font-semibold text-gray-800">보낼 대상 계좌</div>
                     {getSendTargets(expense).length === 0 ? (
-                      <div>보낼 사람이 없습니다.</div>
+                      <div>보낼 금액이 없습니다.</div>
                     ) : (
                       getSendTargets(expense).map((target) => (
                         <div key={target.id} className="flex items-center justify-between gap-2">

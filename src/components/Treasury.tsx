@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { formatCurrency, Participant, TreasuryTx, DuesGoal, Expense, ParticipantAccount } from '../utils/settlement'
+import { calculateAutoSettlementSendAmount, formatCurrency, Participant, TreasuryTx, DuesGoal, Expense, ParticipantAccount } from '../utils/settlement'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -66,6 +66,8 @@ export function Treasury({ participants, treasury, expenses = [], accounts = [],
   const settlementReceivers = useMemo(() => {
     if (!selectedExpense) return []
     if (!selectedExpense.payer_id) return []
+    const sendAmount = calculateAutoSettlementSendAmount(selectedExpense)
+    if (sendAmount <= 0) return []
     const payerId = selectedExpense.payer_id
     const name = participants.find(p => p.id === payerId)?.name || '알 수 없음'
     const account = accountMap.get(payerId)
@@ -75,7 +77,7 @@ export function Treasury({ participants, treasury, expenses = [], accounts = [],
     return [{
       id: payerId,
       name,
-      amount: selectedExpense.amount,
+      amount: sendAmount,
       accountLabel
     }]
   }, [participants, selectedExpense, accountMap])
@@ -121,7 +123,7 @@ export function Treasury({ participants, treasury, expenses = [], accounts = [],
                   <div className="rounded-md bg-white/80 border border-orange-100 p-2 text-xs text-gray-700 space-y-1">
                     <div className="font-semibold text-gray-800">보내기 예정</div>
                     {settlementReceivers.length === 0 ? (
-                      <div>결제자가 없어 보낼 사람이 없습니다.</div>
+                      <div>이번 지출은 자동으로 보낼 금액이 없습니다.</div>
                     ) : (
                       settlementReceivers.map((r) => (
                         <div key={r.id} className="flex items-center justify-between gap-2">

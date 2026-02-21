@@ -5,7 +5,7 @@ import { supabase } from './lib/supabase'
 import { Login } from './components/Login'
 import { AdminPage } from './pages/AdminPage'
 import { MainDashboard } from './routes/MainDashboard'
-import { calculateSettlements } from './utils/settlement'
+import { calculateAutoSettlementSendAmount, calculateSettlements } from './utils/settlement'
 import type { Expense, Participant, TreasuryTx, DuesGoal, ParticipantAccount, TripTreasuryAccount, ExpenseImageInput, ChangeLogEntry } from './utils/settlement'
 import type { Database } from './lib/database.types'
 
@@ -768,29 +768,29 @@ function App() {
       expense_id: string | null
     }> = []
 
-    txRows.push({
-      trip_id: tripId,
-      treasurer_id: current.id,
-      direction: 'send',
-      counterparty_id: expense.payer_id,
-      amount: expense.amount,
-      memo,
-      due_id: null,
-      expense_id: expense.id
-    })
-
-    if (txRows.length === 0) {
-      alert('추가할 정산 내역이 없습니다.')
-      return
+    const sendAmount = calculateAutoSettlementSendAmount(expense)
+    if (sendAmount > 0) {
+      txRows.push({
+        trip_id: tripId,
+        treasurer_id: current.id,
+        direction: 'send',
+        counterparty_id: expense.payer_id,
+        amount: sendAmount,
+        memo,
+        due_id: null,
+        expense_id: expense.id
+      })
     }
 
-    const { error: insertError } = await supabase
-      .from('treasury_transactions')
-      .insert(txRows)
-    if (insertError) {
-      console.error('정산 완료 기록 추가 오류:', insertError)
-      alert('정산 완료 기록 추가에 실패했습니다.')
-      return
+    if (txRows.length > 0) {
+      const { error: insertError } = await supabase
+        .from('treasury_transactions')
+        .insert(txRows)
+      if (insertError) {
+        console.error('정산 완료 기록 추가 오류:', insertError)
+        alert('정산 완료 기록 추가에 실패했습니다.')
+        return
+      }
     }
 
     const { error: updateError } = await supabase

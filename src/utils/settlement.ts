@@ -183,6 +183,21 @@ export function calculateSettlements(
 }
 
 /**
+ * 정산 완료 자동 추가 시 결제자에게 실제로 보내야 하는 금액
+ * = 총 결제액 - (결제자가 해당 지출 참여자일 때 본인 부담분)
+ */
+export function calculateAutoSettlementSendAmount(expense: Expense): number {
+  const participants = Array.isArray(expense.participant_ids) ? expense.participant_ids : []
+  const count = participants.length
+  if (!expense.payer_id || count === 0) return Math.max(0, Math.round(expense.amount || 0))
+
+  const payerIncluded = participants.includes(expense.payer_id)
+  const payerOwnShare = payerIncluded ? (expense.amount || 0) / count : 0
+  const sendAmount = (expense.amount || 0) - payerOwnShare
+  return Math.max(0, Math.round(sendAmount))
+}
+
+/**
  * 숫자를 천 단위 콤마 포맷으로 변환
  */
 export function formatCurrency(amount: number): string {
