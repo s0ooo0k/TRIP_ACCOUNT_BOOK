@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { Participant, Expense, TreasuryTx } from '../utils/settlement'
-import { formatCurrency } from '../utils/settlement'
+import { calculateParticipantNetBalances, formatCurrency } from '../utils/settlement'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -13,54 +13,14 @@ interface Props {
   currentParticipantId: string
 }
 
-type NetBalance = { id: string; name: string; balance: number }
-
-function computeNetBalances(
-  participants: Participant[],
-  expenses: Expense[],
-  treasury: TreasuryTx[] = []
-): NetBalance[] {
-  const map = new Map<string, { name: string; balance: number }>()
-  participants.forEach(p => map.set(p.id, { name: p.name, balance: 0 }))
-
-  expenses.forEach(expense => {
-    const share = expense.amount / expense.participant_ids.length
-    // payer pays -> credit
-    const payer = map.get(expense.payer_id)
-    if (payer) payer.balance += expense.amount
-    // each participant owes their share
-    expense.participant_ids.forEach(pid => {
-      const entry = map.get(pid)
-      if (entry) entry.balance -= share
-    })
-  })
-
-  // 총무에게 이미 낸 금액(받기)과 돌려받은 금액(보내기)을 반영
-  treasury.forEach(tx => {
-    if (!tx.counterparty_id) return
-    const entry = map.get(tx.counterparty_id)
-    if (!entry) return
-    if (tx.direction === 'receive') entry.balance += tx.amount
-    else if (tx.direction === 'send') entry.balance -= tx.amount
-  })
-
-  return Array.from(map.entries()).map(([id, { name, balance }]) => ({
-    id,
-    name,
-    balance: Math.round(balance)
-  }))
-}
-
 export function SettlementGuide({ participants, expenses, treasury = [], currentParticipantId }: Props) {
   const [includeDues, setIncludeDues] = useState(true)
   const [isGuideOpen, setIsGuideOpen] = useState(false)
 
-  const treasuryForCalc = useMemo(
-    () => (includeDues ? treasury : treasury.filter(tx => !tx.due_id)),
-    [includeDues, treasury]
+  const net = useMemo(
+    () => calculateParticipantNetBalances(participants, expenses, treasury, { includeDues }),
+    [participants, expenses, treasury, includeDues]
   )
-
-  const net = computeNetBalances(participants, expenses, treasuryForCalc)
   const receivers = net.filter(n => n.balance > 0)
   const payers = net.filter(n => n.balance < 0)
   const currentBalance = net.find(n => n.id === currentParticipantId)?.balance ?? 0

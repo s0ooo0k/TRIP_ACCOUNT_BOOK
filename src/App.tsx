@@ -723,6 +723,48 @@ function App() {
     await loadTreasury()
   }
 
+  async function handleBulkSettleTreasury(rows: Array<{ counterpartyId: string; amount: number; memo: string }>) {
+    if (!tripId || !user) return
+    const current = participants.find(p => p.id === user.id)
+    if (!current?.is_treasurer) {
+      alert('총무만 기록할 수 있습니다.')
+      return
+    }
+    if (!rows || rows.length === 0) {
+      alert('추가할 송금 내역이 없습니다.')
+      return
+    }
+
+    const invalid = rows.find(row => !row.counterpartyId || !Number.isFinite(row.amount) || row.amount <= 0)
+    if (invalid) {
+      alert('일괄 송금 데이터가 올바르지 않습니다.')
+      return
+    }
+
+    const payload = rows.map(row => ({
+      trip_id: tripId,
+      treasurer_id: current.id,
+      direction: 'send' as const,
+      counterparty_id: row.counterpartyId,
+      amount: Math.round(row.amount),
+      memo: row.memo || '일괄 정산 송금',
+      due_id: null,
+      expense_id: null
+    }))
+
+    const { error } = await supabase
+      .from('treasury_transactions')
+      .insert(payload)
+    if (error) {
+      console.error('일괄 송금 기록 추가 오류:', error)
+      alert('일괄 송금 기록 추가에 실패했습니다.')
+      return
+    }
+
+    await loadTreasury()
+    alert(`${payload.length}건의 송금 기록을 추가했습니다.`)
+  }
+
   async function handleSettleExpense(expense: Expense) {
     if (!tripId || !user) return
     const current = participants.find(p => p.id === user.id)
@@ -1074,6 +1116,7 @@ function App() {
               onRestoreDue={handleRestoreDue}
               onRestoreTreasury={handleRestoreTreasuryTx}
               onAddTreasury={handleAddTreasury}
+              onBulkSettleTreasury={handleBulkSettleTreasury}
               onSettleExpense={handleSettleExpense}
               onAddDue={handleAddDue}
               onUpsertAccount={handleUpsertAccount}

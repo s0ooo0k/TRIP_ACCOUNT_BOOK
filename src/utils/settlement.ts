@@ -116,6 +116,12 @@ export interface PersonalSettlement {
   totalAmount: number
 }
 
+export interface ParticipantNetBalance {
+  id: string
+  name: string
+  balance: number
+}
+
 /**
  * 개별 정산 계산
  * 각 참여자가 다른 참여자들에게 개별적으로 얼마씩 줘야 하는지 계산
@@ -180,6 +186,51 @@ export function calculateSettlements(
   })
 
   return results
+}
+
+/**
+ * 모임통장 기준 참여자별 순잔액 계산
+ * 양수: 모임통장에서 받아야 할 금액 / 음수: 모임통장으로 보내야 할 금액
+ */
+export function calculateParticipantNetBalances(
+  participants: Participant[],
+  expenses: Expense[],
+  treasury: TreasuryTx[] = [],
+  options: { includeDues?: boolean } = {}
+): ParticipantNetBalance[] {
+  const includeDues = options.includeDues ?? true
+  const treasuryForCalc = includeDues ? treasury : treasury.filter(tx => !tx.due_id)
+
+  const map = new Map<string, { name: string; balance: number }>()
+  participants.forEach(p => map.set(p.id, { name: p.name, balance: 0 }))
+
+  expenses.forEach(expense => {
+    const participantCount = expense.participant_ids?.length || 0
+    if (participantCount <= 0) return
+
+    const share = expense.amount / participantCount
+    const payer = map.get(expense.payer_id)
+    if (payer) payer.balance += expense.amount
+
+    expense.participant_ids.forEach(pid => {
+      const entry = map.get(pid)
+      if (entry) entry.balance -= share
+    })
+  })
+
+  treasuryForCalc.forEach(tx => {
+    if (!tx.counterparty_id) return
+    const entry = map.get(tx.counterparty_id)
+    if (!entry) return
+    if (tx.direction === 'receive') entry.balance += tx.amount
+    else if (tx.direction === 'send') entry.balance -= tx.amount
+  })
+
+  return Array.from(map.entries()).map(([id, { name, balance }]) => ({
+    id,
+    name,
+    balance: Math.round(balance)
+  }))
 }
 
 /**

@@ -33,6 +33,7 @@ export function MainDashboard({
   onRestoreDue,
   onRestoreTreasury,
   onAddTreasury,
+  onBulkSettleTreasury,
   onSettleExpense,
   onAddDue,
   onUpsertAccount,
@@ -285,6 +286,7 @@ export function MainDashboard({
                 accounts={accounts}
                 isTreasurer={!!isTreasurer}
                 onAdd={onAddTreasury}
+                onBulkSettle={onBulkSettleTreasury}
                 onSettleExpense={handleSettleExpense}
                 onDeleteTx={onDeleteTreasuryTx}
               />

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { calculateAutoSettlementSendAmount, formatCurrency, Participant, TreasuryTx, DuesGoal, Expense, ParticipantAccount } from '../utils/settlement'
+import { calculateAutoSettlementSendAmount, calculateParticipantNetBalances, formatCurrency, Participant, TreasuryTx, DuesGoal, Expense, ParticipantAccount } from '../utils/settlement'
 import { cn } from '@/lib/utils'
 
 type Props = {
@@ -16,16 +16,20 @@ type Props = {
   isTreasurer: boolean
   dues?: DuesGoal[]
   onAdd: (tx: { direction: 'receive' | 'send'; counterpartyId: string; amount: number; memo: string; dueId?: string; expenseId?: string }) => void
+  onBulkSettle?: (rows: Array<{ counterpartyId: string; amount: number; memo: string }>) => Promise<void> | void
   onSettleExpense?: (expense: Expense) => Promise<void> | void
   onDeleteTx?: (id: string) => void
 }
 
-export function Treasury({ participants, treasury, expenses = [], accounts = [], isTreasurer, onAdd, onSettleExpense, onDeleteTx, dues = [] }: Props) {
+export function Treasury({ participants, treasury, expenses = [], accounts = [], isTreasurer, onAdd, onBulkSettle, onSettleExpense, onDeleteTx, dues = [] }: Props) {
   const [direction, setDirection] = useState<'receive' | 'send'>('receive')
   const [counterpartyId, setCounterpartyId] = useState(participants[0]?.id || '')
   const [amount, setAmount] = useState('')
   const [memo, setMemo] = useState('')
   const [selectedExpenseId, setSelectedExpenseId] = useState('')
+  const [bulkIncludeDues, setBulkIncludeDues] = useState(true)
+  const [bulkMemo, setBulkMemo] = useState('')
+  const [bulkSaving, setBulkSaving] = useState(false)
 
   const totals = useMemo(() => {
     let receive = 0
@@ -81,6 +85,67 @@ export function Treasury({ participants, treasury, expenses = [], accounts = [],
       accountLabel
     }]
   }, [participants, selectedExpense, accountMap])
+
+  const bulkNet = useMemo(
+    () => calculateParticipantNetBalances(participants, expenses, treasury, { includeDues: bulkIncludeDues }),
+    [participants, expenses, treasury, bulkIncludeDues]
+  )
+
+  const bulkReceivers = useMemo(
+    () => bulkNet.filter(item => item.balance > 0),
+    [bulkNet]
+  )
+
+  const bulkPayers = useMemo(
+    () => bulkNet.filter(item => item.balance < 0),
+    [bulkNet]
+  )
+
+  const totalBulkSend = useMemo(
+    () => bulkReceivers.reduce((sum, row) => sum + row.balance, 0),
+    [bulkReceivers]
+  )
+
+  const missingAccountReceivers = useMemo(
+    () => bulkReceivers.filter(row => !accountMap.get(row.id)),
+    [bulkReceivers, accountMap]
+  )
+
+  const handleBulkSettle = async () => {
+    if (!onBulkSettle || bulkSaving) return
+    if (bulkReceivers.length === 0) {
+      alert('보내줄 사람이 없습니다.')
+      return
+    }
+    if (bulkPayers.length > 0) {
+      alert('아직 모임통장으로 받아야 할 금액이 남아 있어 일괄 송금을 진행할 수 없습니다.')
+      return
+    }
+    if (missingAccountReceivers.length > 0) {
+      const names = missingAccountReceivers.map(r => r.name).join(', ')
+      alert(`다음 참여자는 계좌 정보가 없어 진행할 수 없습니다: ${names}`)
+      return
+    }
+    const ok = window.confirm(
+      `총 ${bulkReceivers.length}명에게 ${formatCurrency(totalBulkSend)}원을 일괄 송금 기록으로 추가할까요?`
+    )
+    if (!ok) return
+
+    const defaultMemo = bulkMemo.trim() || '일괄 정산 송금'
+    const rows = bulkReceivers.map(row => ({
+      counterpartyId: row.id,
+      amount: row.balance,
+      memo: `${defaultMemo} - ${row.name}`
+    }))
+
+    try {
+      setBulkSaving(true)
+      await onBulkSettle(rows)
+      setBulkMemo('')
+    } finally {
+      setBulkSaving(false)
+    }
+  }
 
   const handleAutoSettle = async () => {
     if (!selectedExpense || !onSettleExpense) return
@@ -147,6 +212,76 @@ export function Treasury({ participants, treasury, expenses = [], accounts = [],
                 </Button>
               </>
             )}
+          </div>
+        )}
+
+        {isTreasurer && onBulkSettle && (
+          <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-3 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-emerald-900">정산 일괄 송금</div>
+              <span className="text-xs text-emerald-700">모임통장 기준</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <input
+                id="bulk-include-dues"
+                type="checkbox"
+                checked={bulkIncludeDues}
+                onChange={(e) => setBulkIncludeDues(e.target.checked)}
+              />
+              <Label htmlFor="bulk-include-dues" className="cursor-pointer">회비 포함</Label>
+            </div>
+            <div className="rounded-md bg-white/90 border border-emerald-100 p-2 text-xs text-gray-700 space-y-1">
+              <div className="font-semibold text-gray-800">보내기 대상</div>
+              {bulkReceivers.length === 0 ? (
+                <div>보내줄 대상이 없습니다.</div>
+              ) : (
+                bulkReceivers.map((row) => {
+                  const account = accountMap.get(row.id)
+                  const accountLabel = account
+                    ? `${account.bank_name} ${account.account_number}${account.account_holder ? ` · ${account.account_holder}` : ''}`
+                    : '계좌 미등록'
+                  return (
+                    <div key={row.id} className="flex items-center justify-between gap-2">
+                      <div className="text-gray-800">{row.name}</div>
+                      <div className="text-right">
+                        <div className="font-semibold text-emerald-700">{formatCurrency(row.balance)}원</div>
+                        <div className="text-[11px] text-gray-500">{accountLabel}</div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            {bulkPayers.length > 0 && (
+              <p className="text-xs text-orange-700">
+                아직 모임통장으로 받아야 할 금액이 남아 있습니다. 먼저 수금을 마친 뒤 진행하세요.
+              </p>
+            )}
+            {missingAccountReceivers.length > 0 && (
+              <p className="text-xs text-orange-700">
+                계좌 미등록: {missingAccountReceivers.map(r => r.name).join(', ')}
+              </p>
+            )}
+            <div className="space-y-2">
+              <Label>메모 (선택)</Label>
+              <Input
+                value={bulkMemo}
+                onChange={(e) => setBulkMemo(e.target.value)}
+                placeholder="예: 2월 정산 송금"
+              />
+            </div>
+            <div className="rounded-md border border-emerald-100 bg-white px-3 py-2 text-sm flex items-center justify-between">
+              <span className="text-gray-700">일괄 송금 합계</span>
+              <span className="font-semibold text-emerald-700">{formatCurrency(totalBulkSend)}원</span>
+            </div>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={handleBulkSettle}
+              disabled={bulkSaving || bulkReceivers.length === 0 || bulkPayers.length > 0 || missingAccountReceivers.length > 0}
+            >
+              {bulkSaving ? '일괄 송금 기록 추가 중...' : '일괄 송금 기록 추가'}
+            </Button>
           </div>
         )}
 
