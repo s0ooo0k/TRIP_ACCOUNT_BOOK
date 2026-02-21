@@ -5,13 +5,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 interface Props {
   participants: Participant[]
   currentParticipantId?: string
+  isTreasurer?: boolean
   accounts?: ParticipantAccount[]
   onUpsertAccount?: (data: {
+    participantId: string
     bankName: string
     accountNumber: string
     accountHolder: string
@@ -19,11 +22,8 @@ interface Props {
   }) => void
 }
 
-export function ParticipantManager({ participants, currentParticipantId, accounts = [], onUpsertAccount }: Props) {
-  const myAccount = useMemo(
-    () => accounts.find(a => a.participant_id === currentParticipantId),
-    [accounts, currentParticipantId]
-  )
+export function ParticipantManager({ participants, currentParticipantId, isTreasurer = false, accounts = [], onUpsertAccount }: Props) {
+  const [selectedParticipantId, setSelectedParticipantId] = useState('')
 
   const [bankName, setBankName] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
@@ -31,18 +31,14 @@ export function ParticipantManager({ participants, currentParticipantId, account
   const [isPublic, setIsPublic] = useState(false)
 
   useEffect(() => {
-    if (myAccount) {
-      setBankName(myAccount.bank_name || '')
-      setAccountNumber(myAccount.account_number || '')
-      setAccountHolder(myAccount.account_holder || '')
-      setIsPublic(!!myAccount.is_public)
-    } else {
-      setBankName('')
-      setAccountNumber('')
-      setAccountHolder('')
-      setIsPublic(false)
+    if (!isTreasurer) {
+      setSelectedParticipantId(currentParticipantId || '')
+      return
     }
-  }, [myAccount?.id])
+    if (!selectedParticipantId || !participants.some(p => p.id === selectedParticipantId)) {
+      setSelectedParticipantId(currentParticipantId || participants[0]?.id || '')
+    }
+  }, [currentParticipantId, isTreasurer, participants, selectedParticipantId])
 
   const accountsMap = useMemo(() => {
     const map = new Map<string, ParticipantAccount>()
@@ -50,14 +46,43 @@ export function ParticipantManager({ participants, currentParticipantId, account
     return map
   }, [accounts])
 
+  const selectedParticipant = useMemo(
+    () => participants.find(p => p.id === selectedParticipantId),
+    [participants, selectedParticipantId]
+  )
+
+  const selectedAccount = useMemo(
+    () => accounts.find(a => a.participant_id === selectedParticipantId),
+    [accounts, selectedParticipantId]
+  )
+
+  useEffect(() => {
+    if (selectedAccount) {
+      setBankName(selectedAccount.bank_name || '')
+      setAccountNumber(selectedAccount.account_number || '')
+      setAccountHolder(selectedAccount.account_holder || '')
+      setIsPublic(!!selectedAccount.is_public)
+      return
+    }
+    setBankName('')
+    setAccountNumber('')
+    setAccountHolder('')
+    setIsPublic(false)
+  }, [selectedAccount?.id, selectedParticipantId])
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault()
     if (!onUpsertAccount) return
+    if (!selectedParticipantId) {
+      alert('계좌 정보를 등록할 참여자를 선택해주세요.')
+      return
+    }
     if (!bankName.trim() || !accountNumber.trim() || !accountHolder.trim()) {
       alert('은행명, 계좌번호, 예금주를 모두 입력해주세요.')
       return
     }
     onUpsertAccount({
+      participantId: selectedParticipantId,
       bankName: bankName.trim(),
       accountNumber: accountNumber.trim(),
       accountHolder: accountHolder.trim(),
@@ -69,15 +94,33 @@ export function ParticipantManager({ participants, currentParticipantId, account
     return <div className="text-sm text-gray-500">등록된 참여자가 없습니다.</div>
   }
 
+  const editingOther = !!(isTreasurer && currentParticipantId && selectedParticipantId && selectedParticipantId !== currentParticipantId)
+  const checkboxId = `account-public-${selectedParticipantId || 'self'}`
+
   return (
     <div className="space-y-4">
       {currentParticipantId && onUpsertAccount && (
         <Card className="bg-white/90 border-orange-100">
           <CardHeader>
-            <CardTitle className="text-lg">내 계좌번호 등록</CardTitle>
+            <CardTitle className="text-lg">
+              {editingOther ? `${selectedParticipant?.name || '참여자'} 계좌번호 등록` : '내 계좌번호 등록'}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSave} className="grid gap-3 sm:grid-cols-3 sm:gap-4">
+              {isTreasurer && (
+                <div className="space-y-2 sm:col-span-3">
+                  <Label>등록 대상</Label>
+                  <Select value={selectedParticipantId} onChange={(e) => setSelectedParticipantId(e.target.value)}>
+                    {participants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.name}{participant.id === currentParticipantId ? ' (나)' : ''}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-xs text-gray-500">총무는 다른 참여자의 계좌를 대신 등록/수정할 수 있습니다.</p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label>은행명</Label>
                 <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="예: 국민은행" />
@@ -92,16 +135,16 @@ export function ParticipantManager({ participants, currentParticipantId, account
               </div>
               <div className="sm:col-span-3 flex items-center gap-2 pt-1">
                 <Checkbox
-                  id="account-public"
+                  id={checkboxId}
                   checked={isPublic}
                   onChange={(e) => setIsPublic(e.target.checked)}
                 />
-                <Label htmlFor="account-public" className="cursor-pointer">일행에게도 계좌 공개</Label>
+                <Label htmlFor={checkboxId} className="cursor-pointer">일행에게도 계좌 공개</Label>
                 <span className="text-xs text-gray-500">체크 해제 시 총무/본인만 볼 수 있어요.</span>
               </div>
               <div className="sm:col-span-3">
                 <Button type="submit" className="w-full sm:w-auto">
-                  {myAccount ? '수정 저장' : '등록'}
+                  {selectedAccount ? '수정 저장' : '등록'}
                 </Button>
               </div>
             </form>

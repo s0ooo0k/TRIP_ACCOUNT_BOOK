@@ -233,6 +233,7 @@ export function MainDashboard({
             <ParticipantManager
               participants={participants}
               currentParticipantId={user.id}
+              isTreasurer={!!isTreasurer}
               accounts={accounts}
               onUpsertAccount={onUpsertAccount}
             />

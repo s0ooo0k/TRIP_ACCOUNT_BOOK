@@ -462,14 +462,28 @@ function App() {
   }
 
   async function handleUpsertAccount(data: {
+    participantId: string
     bankName: string
     accountNumber: string
     accountHolder: string
     isPublic: boolean
   }) {
     if (!user) return
+    const current = participants.find(p => p.id === user.id)
+    const targetParticipantId = data.participantId || user.id
+    const isOwnAccount = targetParticipantId === user.id
+    if (!isOwnAccount && !current?.is_treasurer) {
+      alert('총무만 다른 참여자 계좌를 등록/수정할 수 있습니다.')
+      return
+    }
+    const targetParticipant = participants.find(p => p.id === targetParticipantId)
+    if (!targetParticipant) {
+      alert('대상 참여자를 찾지 못했습니다.')
+      return
+    }
+
     const payload = {
-      participant_id: user.id,
+      participant_id: targetParticipantId,
       bank_name: data.bankName,
       account_number: data.accountNumber,
       account_holder: data.accountHolder,
@@ -488,11 +502,16 @@ function App() {
     const { error: flagError } = await supabase
       .from('participants')
       .update({ has_account: true })
-      .eq('id', user.id)
+      .eq('id', targetParticipantId)
     if (flagError) {
       console.error('has_account 업데이트 오류:', flagError)
     }
+    await loadParticipants()
     await loadAccounts()
+    if (!isOwnAccount && current?.is_treasurer) {
+      alert(`${targetParticipant.name} 님의 계좌 정보를 저장했습니다.`)
+      return
+    }
     alert('계좌 정보를 저장했습니다.')
   }
 
